@@ -1,0 +1,65 @@
+{
+  "name": "contextforge-mcp",
+  "version": "0.1.76",
+  "description": "Persistent memory MCP server for Claude Code, Cursor, and GitHub Copilot. Give your AI assistants long-term memory via the Model Context Protocol.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "contextforge-mcp": "dist/index.js",
+    "contextforge-setup": "dist/setup.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "start": "node dist/index.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint src --ext .ts",
+    "clean": "rm -rf dist",
+    "prepublishOnly": "npm run clean && npm run build",
+    "prepack": "npm run build"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "keywords": [
+    "mcp",
+    "mcp-server",
+    "model-context-protocol",
+    "memory",
+    "persistent-memory",
+    "context",
+    "ai",
+    "claude",
+    "claude-code",
+    "cursor",
+    "copilot",
+    "knowledge-management",
+    "ai-agent-memory"
+  ],
+  "author": "Alfredo Izquierdo",
+  "license": "MIT",
+  "homepage": "https://contextforge.dev",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/alfredoizdev/contextforge-mcp.git"
+  },
+  "bugs": {
+    "url": "https://github.com/alfredoizdev/contextforge-mcp/issues"
+  }
+}
