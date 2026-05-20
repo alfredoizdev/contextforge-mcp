@@ -3,6 +3,7 @@
 [![npm version](https://img.shields.io/npm/v/contextforge-mcp.svg)](https://www.npmjs.com/package/contextforge-mcp)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D20-brightgreen.svg)](https://nodejs.org)
+[![Glama MCP](https://glama.ai/mcp/servers/alfredoizdev/contextforge-mcp/badges/score.svg)](https://glama.ai/mcp/servers/alfredoizdev/contextforge-mcp)
 
 > Give Claude Code, Cursor, and GitHub Copilot **persistent memory across sessions** via the Model Context Protocol (MCP). Stop re-explaining your project every time.
 

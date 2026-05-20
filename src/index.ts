@@ -266,7 +266,7 @@ const TOOLS = [
     name: "memory_ingest",
     description:
       "Add content to the contextual memory. Use this to store code snippets, documentation, decisions, or any knowledge you want to remember.",
-    annotations: { title: "Save to Memory", destructiveHint: true },
+    annotations: { title: "Save to Memory", readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -308,7 +308,7 @@ const TOOLS = [
     name: "memory_query",
     description:
       "Search the contextual memory using semantic search. Returns the most relevant stored content based on your query.",
-    annotations: { title: "Search Memory", readOnlyHint: true },
+    annotations: { title: "Search Memory", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -365,7 +365,7 @@ const TOOLS = [
     name: "memory_get_item",
     description:
       "Get the full content of a knowledge item by its ID. Use this when memory_query returns truncated previews and you need the complete content.",
-    annotations: { title: "Get Memory Item", readOnlyHint: true },
+    annotations: { title: "Get Memory Item", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -382,7 +382,7 @@ const TOOLS = [
     name: "memory_list_projects",
     description:
       "List all projects. Projects contain multiple spaces for organizing knowledge by project.",
-    annotations: { title: "List Projects", readOnlyHint: true },
+    annotations: { title: "List Projects", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     inputSchema: {
       type: "object" as const,
       properties: {},
@@ -392,7 +392,7 @@ const TOOLS = [
   {
     name: "memory_create_project",
     description: "Create a new project to organize related spaces",
-    annotations: { title: "Create Project", destructiveHint: true },
+    annotations: { title: "Create Project", readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -413,7 +413,7 @@ const TOOLS = [
     name: "memory_list_spaces",
     description:
       'List knowledge spaces (workspaces). By default shows only knowledge spaces. Use space_type "git" for GitHub repos, or "all" to see everything.',
-    annotations: { title: "List Spaces", readOnlyHint: true },
+    annotations: { title: "List Spaces", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -439,7 +439,7 @@ const TOOLS = [
     name: "memory_create_space",
     description:
       "Create a new memory space (workspace) for organizing knowledge",
-    annotations: { title: "Create Space", destructiveHint: true },
+    annotations: { title: "Create Space", readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -466,7 +466,7 @@ const TOOLS = [
   {
     name: "memory_move_space",
     description: "Move a space to a different project",
-    annotations: { title: "Move Space", destructiveHint: true },
+    annotations: { title: "Move Space", readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -486,7 +486,7 @@ const TOOLS = [
     name: "memory_delete_space",
     description:
       "Delete a space and all its items permanently. This action cannot be undone.",
-    annotations: { title: "Delete Space", destructiveHint: true },
+    annotations: { title: "Delete Space", readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -502,7 +502,7 @@ const TOOLS = [
     name: "memory_delete_project",
     description:
       "Delete a project and all its spaces permanently. This will delete all spaces and their items within the project. This action cannot be undone.",
-    annotations: { title: "Delete Project", destructiveHint: true },
+    annotations: { title: "Delete Project", readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -517,7 +517,7 @@ const TOOLS = [
   {
     name: "memory_relate",
     description: "Create a relationship between two knowledge items",
-    annotations: { title: "Relate Memory Items", destructiveHint: true },
+    annotations: { title: "Relate Memory Items", readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -562,7 +562,7 @@ const TOOLS = [
     name: "memory_list_relationships",
     description:
       "List all relationships for a knowledge item, showing both incoming and outgoing connections with related item details",
-    annotations: { title: "List Relationships", readOnlyHint: true },
+    annotations: { title: "List Relationships", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -577,7 +577,7 @@ const TOOLS = [
   {
     name: "memory_delete",
     description: "Delete a knowledge item from memory by ID or title",
-    annotations: { title: "Delete Memory Item", destructiveHint: true },
+    annotations: { title: "Delete Memory Item", readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -605,7 +605,7 @@ const TOOLS = [
   {
     name: "memory_stats",
     description: "Get statistics about memory usage",
-    annotations: { title: "Memory Stats", readOnlyHint: true },
+    annotations: { title: "Memory Stats", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -621,7 +621,7 @@ const TOOLS = [
     name: "memory_list_items",
     description:
       "List all items stored in memory. Shows titles, previews, tags, and creation dates.",
-    annotations: { title: "List Memory Items", readOnlyHint: true },
+    annotations: { title: "List Memory Items", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -646,7 +646,7 @@ const TOOLS = [
     name: "memory_help",
     description:
       "Show help and usage instructions for ContextForge memory commands",
-    annotations: { title: "Memory Help", readOnlyHint: true },
+    annotations: { title: "Memory Help", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     inputSchema: {
       type: "object" as const,
       properties: {},
@@ -658,7 +658,7 @@ const TOOLS = [
     name: "memory_git_connect",
     description:
       "Connect a GitHub repository to automatically sync commits and PRs to memory",
-    annotations: { title: "Connect GitHub Repo", destructiveHint: true },
+    annotations: { title: "Connect GitHub Repo", readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -678,7 +678,7 @@ const TOOLS = [
   {
     name: "memory_git_list",
     description: "List all connected GitHub repositories",
-    annotations: { title: "List GitHub Repos", readOnlyHint: true },
+    annotations: { title: "List GitHub Repos", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -694,7 +694,7 @@ const TOOLS = [
     name: "memory_git_activate",
     description:
       "Activate or deactivate a connected repository webhook after setup",
-    annotations: { title: "Activate GitHub Repo", destructiveHint: true },
+    annotations: { title: "Activate GitHub Repo", readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -719,7 +719,7 @@ const TOOLS = [
   {
     name: "memory_git_disconnect",
     description: "Disconnect a GitHub repository and stop syncing",
-    annotations: { title: "Disconnect GitHub Repo", destructiveHint: true },
+    annotations: { title: "Disconnect GitHub Repo", readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -740,7 +740,7 @@ const TOOLS = [
     name: "memory_git_sync",
     description:
       "Sync existing commits and PRs from a connected GitHub repository into memory",
-    annotations: { title: "Sync GitHub Repo", destructiveHint: true },
+    annotations: { title: "Sync GitHub Repo", readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -769,7 +769,7 @@ const TOOLS = [
   {
     name: "memory_git_commits",
     description: "List commits stored in memory from connected repositories",
-    annotations: { title: "List Git Commits", readOnlyHint: true },
+    annotations: { title: "List Git Commits", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -803,7 +803,7 @@ const TOOLS = [
     name: "memory_git_prs",
     description:
       "List pull requests stored in memory from connected repositories",
-    annotations: { title: "List Pull Requests", readOnlyHint: true },
+    annotations: { title: "List Pull Requests", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -836,7 +836,7 @@ const TOOLS = [
   {
     name: "memory_snapshot_create",
     description: "Create a snapshot (backup) of the current memory state",
-    annotations: { title: "Create Snapshot", destructiveHint: true },
+    annotations: { title: "Create Snapshot", readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -859,7 +859,7 @@ const TOOLS = [
   {
     name: "memory_snapshot_list",
     description: "List all available snapshots",
-    annotations: { title: "List Snapshots", readOnlyHint: true },
+    annotations: { title: "List Snapshots", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -874,7 +874,7 @@ const TOOLS = [
   {
     name: "memory_snapshot_restore",
     description: "Restore memory to a previous snapshot state",
-    annotations: { title: "Restore Snapshot", destructiveHint: true },
+    annotations: { title: "Restore Snapshot", readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -895,7 +895,7 @@ const TOOLS = [
   {
     name: "memory_snapshot_delete",
     description: "Delete a snapshot",
-    annotations: { title: "Delete Snapshot", destructiveHint: true },
+    annotations: { title: "Delete Snapshot", readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -912,7 +912,7 @@ const TOOLS = [
     name: "memory_export",
     description:
       "Export all items from a space to JSON, Markdown, or CSV format",
-    annotations: { title: "Export Memory", readOnlyHint: true },
+    annotations: { title: "Export Memory", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -933,7 +933,7 @@ const TOOLS = [
     name: "memory_import",
     description:
       "Import items from JSON, Markdown, Notion, or Obsidian format into a space",
-    annotations: { title: "Import Memory", destructiveHint: true },
+    annotations: { title: "Import Memory", readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -973,7 +973,7 @@ const TOOLS = [
     name: "memory_ingest_batch",
     description:
       "Add multiple items to memory in a single operation. More efficient than multiple single ingests.",
-    annotations: { title: "Batch Save to Memory", destructiveHint: true },
+    annotations: { title: "Batch Save to Memory", readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -1013,7 +1013,7 @@ const TOOLS = [
     name: "memory_delete_batch",
     description:
       "Delete multiple items from memory based on filters. Use dry_run=true first to preview what will be deleted.",
-    annotations: { title: "Batch Delete Memory Items", destructiveHint: true },
+    annotations: { title: "Batch Delete Memory Items", readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -1072,7 +1072,7 @@ const TOOLS = [
     name: "memory_link_project",
     description:
       "Link the current directory to a ContextForge project. When linked, all queries will be automatically filtered to only search within that project's spaces. This creates a .contextforge file in the current directory.",
-    annotations: { title: "Link Project", destructiveHint: true },
+    annotations: { title: "Link Project", readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -1094,7 +1094,7 @@ const TOOLS = [
     name: "memory_unlink_project",
     description:
       "Remove the project link from the current directory. This deletes the .contextforge file and queries will no longer be filtered by project.",
-    annotations: { title: "Unlink Project", destructiveHint: true },
+    annotations: { title: "Unlink Project", readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     inputSchema: {
       type: "object" as const,
       properties: {},
@@ -1105,7 +1105,7 @@ const TOOLS = [
     name: "memory_current_project",
     description:
       "Show the currently linked project for this directory, including its spaces. Use this to see which project is linked and what spaces are available.",
-    annotations: { title: "Current Linked Project", readOnlyHint: true },
+    annotations: { title: "Current Linked Project", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     inputSchema: {
       type: "object" as const,
       properties: {},
@@ -1117,7 +1117,7 @@ const TOOLS = [
     name: "tasks_list",
     description:
       'List tasks assigned to you. Shows pending tasks by default. Use status "all" to see everything, or "resolved" for completed tasks. IMPORTANT: Each task includes a dashboard URL (🔗). You MUST include these clickable links when presenting tasks to the user.',
-    annotations: { title: "List Tasks", readOnlyHint: true },
+    annotations: { title: "List Tasks", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -1148,7 +1148,7 @@ const TOOLS = [
     name: "tasks_start",
     description:
       'Mark a task as "in_progress". Use this when you start working on a task. Accepts any identifier: UUID, short_id, or task title. The response includes a dashboard URL — always show it to the user.',
-    annotations: { title: "Start Task", destructiveHint: true },
+    annotations: { title: "Start Task", readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -1164,7 +1164,7 @@ const TOOLS = [
     name: "tasks_resolve",
     description:
       'Mark a task as "resolved". Use this when you finish working on a task. Accepts any identifier: UUID, short_id, or task title. The response includes a dashboard URL — always show it to the user.',
-    annotations: { title: "Resolve Task", destructiveHint: true },
+    annotations: { title: "Resolve Task", readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -1180,7 +1180,7 @@ const TOOLS = [
     name: "tasks_what_next",
     description:
       "Get a recommendation of what task to work on next, based on priority and due dates. Use this when you want to know what task to focus on. The response includes a dashboard URL — always show it to the user.",
-    annotations: { title: "What Task is Next?", readOnlyHint: true },
+    annotations: { title: "What Task is Next?", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     inputSchema: {
       type: "object" as const,
       properties: {},
@@ -1192,7 +1192,7 @@ const TOOLS = [
     name: "tasks_create",
     description:
       "Create a new task in a project. Optionally assign it to a collaborator by their email. The response includes a dashboard URL — always show it to the user.",
-    annotations: { title: "Create Task", destructiveHint: true },
+    annotations: { title: "Create Task", readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -1244,7 +1244,7 @@ const TOOLS = [
     name: "tasks_update",
     description:
       "Update a task's title, description, status, priority, tags, due date, or assignee. Accepts any identifier: UUID, short_id, or task title. The response includes a dashboard URL — always show it to the user.",
-    annotations: { title: "Update Task", destructiveHint: true },
+    annotations: { title: "Update Task", readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -1290,7 +1290,7 @@ const TOOLS = [
   {
     name: "tasks_assign",
     description: "Assign a task to a collaborator by their email address. Accepts any task identifier: UUID, short_id, or task title. The response includes a dashboard URL — always show it to the user.",
-    annotations: { title: "Assign Task", destructiveHint: true },
+    annotations: { title: "Assign Task", readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -1310,7 +1310,7 @@ const TOOLS = [
     name: "tasks_resolve_by_name",
     description:
       "Resolve a task by searching for it by title, short_id, or UUID. Use this when you have any identifier for the task. The response includes a dashboard URL — always show it to the user.",
-    annotations: { title: "Resolve Task by Name", destructiveHint: true },
+    annotations: { title: "Resolve Task by Name", readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -1326,7 +1326,7 @@ const TOOLS = [
     name: "tasks_delete",
     description:
       "Permanently delete a task. Accepts any identifier: UUID, short_id, or task title. Also deletes related comments, activity, and notifications.",
-    annotations: { title: "Delete Task", destructiveHint: true },
+    annotations: { title: "Delete Task", readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -1343,7 +1343,7 @@ const TOOLS = [
     name: "tasks_list_comments",
     description:
       "List comments on a task. Accepts any identifier: UUID, short_id, or task title.",
-    annotations: { title: "List Task Comments", readOnlyHint: true },
+    annotations: { title: "List Task Comments", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -1359,7 +1359,7 @@ const TOOLS = [
     name: "tasks_add_comment",
     description:
       "Add a comment to a task. Accepts any task identifier: UUID, short_id, or task title. The response includes the task dashboard URL — always show it to the user.",
-    annotations: { title: "Add Task Comment", destructiveHint: true },
+    annotations: { title: "Add Task Comment", readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -1380,7 +1380,7 @@ const TOOLS = [
     name: "collaborators_list",
     description:
       "List collaborators on a shared project. Shows who has access and what tasks are assigned to them.",
-    annotations: { title: "List Collaborators", readOnlyHint: true },
+    annotations: { title: "List Collaborators", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -1403,7 +1403,7 @@ const TOOLS = [
     name: "project_share",
     description:
       "Share a project with a collaborator by email. Creates an invitation and returns the invite URL. An email notification may also be sent.",
-    annotations: { title: "Share Project", destructiveHint: true },
+    annotations: { title: "Share Project", readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -1433,7 +1433,7 @@ const TOOLS = [
     name: "skills_list",
     description:
       "List all Skills in a project. Returns skills with their name, description, model, and prompt body.",
-    annotations: { title: "List Skills", readOnlyHint: true },
+    annotations: { title: "List Skills", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -1445,7 +1445,7 @@ const TOOLS = [
   {
     name: "skills_get",
     description: "Get a single Skill by ID with full body.",
-    annotations: { title: "Get Skill", readOnlyHint: true },
+    annotations: { title: "Get Skill", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -1458,7 +1458,7 @@ const TOOLS = [
     name: "skills_create",
     description:
       "Create a new Skill in a project. The 'body' is a markdown prompt template that may use {{variable}} placeholders for input_params at run time.",
-    annotations: { title: "Create Skill", destructiveHint: false },
+    annotations: { title: "Create Skill", readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -1492,7 +1492,7 @@ const TOOLS = [
   {
     name: "skills_update",
     description: "Update an existing Skill.",
-    annotations: { title: "Update Skill", destructiveHint: true },
+    annotations: { title: "Update Skill", readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -1511,7 +1511,7 @@ const TOOLS = [
   {
     name: "skills_delete",
     description: "Delete a Skill.",
-    annotations: { title: "Delete Skill", destructiveHint: true },
+    annotations: { title: "Delete Skill", readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -1524,7 +1524,7 @@ const TOOLS = [
     name: "skills_run",
     description:
       "Execute a Skill on the configured LLM, optionally storing the output as a knowledge_item, and returns the result. Available to all project members.",
-    annotations: { title: "Run Skill", destructiveHint: false },
+    annotations: { title: "Run Skill", readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -1541,7 +1541,7 @@ const TOOLS = [
     name: "routines_list",
     description:
       "List all Routines in a project. Returns routines with their schedule, last/next run, and enabled flag.",
-    annotations: { title: "List Routines", readOnlyHint: true },
+    annotations: { title: "List Routines", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -1554,7 +1554,7 @@ const TOOLS = [
     name: "routines_get",
     description:
       "Get a single Routine by ID, including its cron expression, input_params, and last/next run.",
-    annotations: { title: "Get Routine", readOnlyHint: true },
+    annotations: { title: "Get Routine", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     inputSchema: {
       type: "object" as const,
       properties: { id: { type: "string", description: "Routine UUID" } },
@@ -1565,7 +1565,7 @@ const TOOLS = [
     name: "routines_create",
     description:
       "Create a new Routine. Schedules a Skill to run on a cron expression. Pass either schedule_preset (hourly/daily/weekly/monthly) OR a custom cron_expression. timezone defaults to UTC.",
-    annotations: { title: "Create Routine", destructiveHint: false },
+    annotations: { title: "Create Routine", readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -1598,7 +1598,7 @@ const TOOLS = [
     name: "routines_update",
     description:
       "Update an existing Routine (name, schedule, timezone, input_params).",
-    annotations: { title: "Update Routine", destructiveHint: false },
+    annotations: { title: "Update Routine", readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -1619,7 +1619,7 @@ const TOOLS = [
     name: "routines_toggle",
     description:
       "Enable or disable a Routine without deleting it. Pass enabled=false to pause.",
-    annotations: { title: "Toggle Routine", destructiveHint: false },
+    annotations: { title: "Toggle Routine", readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -1633,7 +1633,7 @@ const TOOLS = [
     name: "routines_run_now",
     description:
       "Fire a Routine immediately, ahead of its schedule. Creates a skill_executions row with trigger_type=scheduled and routine_id set, just like the cron tick would.",
-    annotations: { title: "Run Routine Now", destructiveHint: false },
+    annotations: { title: "Run Routine Now", readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     inputSchema: {
       type: "object" as const,
       properties: { id: { type: "string" } },
@@ -1644,7 +1644,7 @@ const TOOLS = [
     name: "routines_delete",
     description:
       "Permanently delete a Routine. Execution history rows are retained.",
-    annotations: { title: "Delete Routine", destructiveHint: true },
+    annotations: { title: "Delete Routine", readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
     inputSchema: {
       type: "object" as const,
       properties: { id: { type: "string" } },
