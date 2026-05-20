@@ -1,0 +1,37 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.alfredoizdev/contextforge-mcp",
+  "description": "Persistent memory MCP server for Claude Code, Cursor, and GitHub Copilot.",
+  "repository": {
+    "url": "https://github.com/alfredoizdev/contextforge-mcp",
+    "source": "github"
+  },
+  "version": "0.1.77",
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "contextforge-mcp",
+      "version": "0.1.77",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "CONTEXTFORGE_API_KEY",
+          "description": "Your API key from the ContextForge dashboard at contextforge.dev",
+          "isRequired": true,
+          "format": "string",
+          "isSecret": true
+        },
+        {
+          "name": "CONTEXTFORGE_API_URL",
+          "description": "API endpoint URL (defaults to production)",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": false,
+          "default": "https://api.contextforge.dev"
+        }
+      ]
+    }
+  ]
+}
