@@ -1,0 +1,13 @@
+node_modules
+dist
+.git
+.github
+.vscode
+*.log
+.DS_Store
+coverage
+tests
+vitest.config.ts
+README.md
+LICENSE
+.gitignore
