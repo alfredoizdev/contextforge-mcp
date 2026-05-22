@@ -33,6 +33,26 @@ function writeCache(cache: UpdateCache): void {
 let updateMessage: string | null = null;
 
 /**
+ * Returns true if `latest` is a strictly newer semver than `current`.
+ * Handles X.Y.Z patch/minor/major comparison. Non-numeric segments treated as 0
+ * (so prerelease tags like "0.1.79-beta" parse as 0.1.79 for the leading segments).
+ */
+export function isVersionNewer(latest: string, current: string): boolean {
+  const parse = (v: string): [number, number, number] => {
+    const [a, b, c] = v.split(".").map((seg) => {
+      const n = parseInt(seg, 10);
+      return Number.isNaN(n) ? 0 : n;
+    });
+    return [a ?? 0, b ?? 0, c ?? 0];
+  };
+  const [la, lb, lc] = parse(latest);
+  const [ca, cb, cc] = parse(current);
+  if (la !== ca) return la > ca;
+  if (lb !== cb) return lb > cb;
+  return lc > cc;
+}
+
+/**
  * Check npm for a newer version. Stores result internally.
  * Call getUpdateNotice() later to retrieve the message.
  */
@@ -65,7 +85,7 @@ export async function checkForUpdates(
       }
     }
 
-    if (latestVersion && latestVersion !== currentVersion) {
+    if (latestVersion && isVersionNewer(latestVersion, currentVersion)) {
       updateMessage = `\n⚠️ Update available: ${currentVersion} → ${latestVersion} — Run: npm update -g contextforge-mcp`;
       // Also log to stderr for debugging
       console.error(

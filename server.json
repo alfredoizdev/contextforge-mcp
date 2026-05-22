@@ -6,12 +6,12 @@
     "url": "https://github.com/alfredoizdev/contextforge-mcp",
     "source": "github"
   },
-  "version": "0.1.79",
+  "version": "0.1.80",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "contextforge-mcp",
-      "version": "0.1.79",
+      "version": "0.1.80",
       "transport": {
         "type": "stdio"
       },
