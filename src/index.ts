@@ -265,7 +265,7 @@ const TOOLS = [
   {
     name: "memory_ingest",
     description:
-      "Add content to the contextual memory. Use this to store code snippets, documentation, decisions, or any knowledge you want to remember.",
+      "**Save important context to persistent memory — be proactive.** Call this WHENEVER you learn information that would be valuable in a future conversation: project decisions ('we chose Postgres because X'), architectural choices, user preferences, debugging insights, recurring patterns, deadlines, stakeholder context, or any 'remember this' / 'save this' / 'note that' style request from the user. Heuristic: if you would be sad to lose this fact when the conversation ends, ingest it. Better to over-save than to under-save — the memory_query semantic search will surface what's relevant later. Always pass meaningful `title` and `tags` so the item is discoverable.",
     annotations: { title: "Save to Memory", readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     inputSchema: {
       type: "object" as const,
@@ -307,7 +307,7 @@ const TOOLS = [
   {
     name: "memory_query",
     description:
-      "Search the contextual memory using semantic search. Returns the most relevant stored content based on your query.",
+      "**Search persistent memory BEFORE answering any project-specific question.** You MUST call this tool: (a) at the start of any conversation that touches the user's codebase, work, or decisions, BEFORE generating any response; (b) whenever the user references prior context ('did we', 'we decided', 'remember', 'what did I save', 'last time'); (c) before making architectural or design recommendations — the user's prior decisions live here. Returns semantically relevant stored content. Skipping this when relevant context exists makes you appear to have amnesia and is the #1 reason users abandon persistent memory — always check first, even if you think you remember.",
     annotations: { title: "Search Memory", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     inputSchema: {
       type: "object" as const,
@@ -1104,7 +1104,7 @@ const TOOLS = [
   {
     name: "memory_current_project",
     description:
-      "Show the currently linked project for this directory, including its spaces. Use this to see which project is linked and what spaces are available.",
+      "**Check the linked project at the start of every new conversation in a directory.** Call this FIRST (alongside memory_query) before answering questions about the user's project, code, or work — it tells you which ContextForge project and spaces are scoped to the current working directory. If `linked: false`, surface that to the user and suggest `memory_link_project`. Pair this with memory_query as your two startup-context calls — they are the cheapest possible way to avoid hallucinating about the user's project.",
     annotations: { title: "Current Linked Project", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     inputSchema: {
       type: "object" as const,
@@ -1116,7 +1116,7 @@ const TOOLS = [
   {
     name: "tasks_list",
     description:
-      'List tasks assigned to you. Shows pending tasks by default. Use status "all" to see everything, or "resolved" for completed tasks. IMPORTANT: Each task includes a dashboard URL (🔗). You MUST include these clickable links when presenting tasks to the user.',
+      '**Call this at the start of any conversation about work, planning, or status — and any time the user asks about pending/open/in-progress tasks.** Shows pending tasks by default (sort by due date, urgent first). Use status "all" for everything, "resolved" for completed, "in_progress" for active work. IMPORTANT: Every task includes a dashboard URL (🔗). You MUST include these clickable links when presenting tasks to the user. If you see overdue tasks (past due date), surface them at the top of your response.',
     annotations: { title: "List Tasks", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     inputSchema: {
       type: "object" as const,
@@ -1179,7 +1179,7 @@ const TOOLS = [
   {
     name: "tasks_what_next",
     description:
-      "Get a recommendation of what task to work on next, based on priority and due dates. Use this when you want to know what task to focus on. The response includes a dashboard URL — always show it to the user.",
+      "**Call this whenever the user asks what they should work on, what's next, what's pending, or how to start the day.** Trigger phrases include: 'what should I do', 'where do I start', 'qué hago hoy', 'next task', 'I have time, what's open'. Returns the highest-priority unresolved task assigned to the user, with due date and priority. Always include the dashboard URL (🔗) in your reply so the user can click through. Prefer this over generic answers when the user seems unsure about priorities — it gives a concrete next action.",
     annotations: { title: "What Task is Next?", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     inputSchema: {
       type: "object" as const,
