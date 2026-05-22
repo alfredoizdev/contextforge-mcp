@@ -56,10 +56,18 @@ import { resolveTaskId, resolveTaskTitle, resolveTaskIdentifier } from "./task-p
 import { appendFileSync } from "fs";
 import { createRequire } from "module";
 import { checkForUpdates, getUpdateNotice } from "./update-checker.js";
+import { runInitCLI } from "./init.js";
 
 const require = createRequire(import.meta.url);
 const pkg = require("../package.json");
 const VERSION: string = pkg.version;
+
+// ============ CLI subcommand: `contextforge-mcp init` ============
+// Must run BEFORE any MCP server setup, since this exits the process.
+if (process.argv[2] === "init") {
+  runInitCLI(process.cwd());
+  process.exit(0);
+}
 
 // ============ Logger with Colors ============
 

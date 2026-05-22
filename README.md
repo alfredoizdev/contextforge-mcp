@@ -101,6 +101,18 @@ Add to your Copilot MCP config:
 }
 ```
 
+### 4. Initialize your project (required)
+
+After installing the MCP, run this in every project directory where you want Claude to use ContextForge memory:
+
+```bash
+npx contextforge-mcp init
+```
+
+This writes a `CLAUDE.md` file that tells Claude Code to use the ContextForge MCP instead of its built-in file-based auto-memory. **Without this step, Claude will silently ignore ContextForge for memory queries** — even though the MCP is connected — because the built-in auto-memory wins by default.
+
+The command is idempotent: running it again is a no-op if the section is already present. If you already have a `CLAUDE.md`, the ContextForge section is appended without touching your existing content.
+
 ---
 
 ## Available Tools
