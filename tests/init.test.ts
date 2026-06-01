@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtempSync, rmSync, writeFileSync, readFileSync, existsSync } from "fs";
+import { mkdtempSync, rmSync, writeFileSync, readFileSync, existsSync, mkdirSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
-import { runInit, INIT_MARKER, CLAUDE_TEMPLATE } from "../src/init.js";
+import { runInit, INIT_MARKER, CLAUDE_TEMPLATE, detectEditors } from "../src/init.js";
 
 describe("runInit", () => {
   let tmp: string;
@@ -72,5 +72,50 @@ describe("runInit", () => {
     const written = readFileSync(claudeMdPath, "utf-8");
     expect(written.startsWith("# No trailing newline\n")).toBe(true);
     expect(written).toContain(INIT_MARKER);
+  });
+});
+
+describe("detectEditors", () => {
+  let tmp: string;
+
+  beforeEach(() => {
+    tmp = mkdtempSync(join(tmpdir(), "cf-detect-test-"));
+  });
+
+  afterEach(() => {
+    rmSync(tmp, { recursive: true, force: true });
+  });
+
+  it("detects claude when CLAUDE.md exists", () => {
+    writeFileSync(join(tmp, "CLAUDE.md"), "# anything");
+    expect(detectEditors(tmp)).toEqual(["claude"]);
+  });
+
+  it("detects claude when .claude/ directory exists", () => {
+    mkdirSync(join(tmp, ".claude"));
+    expect(detectEditors(tmp)).toEqual(["claude"]);
+  });
+
+  it("detects cursor when .cursorrules exists", () => {
+    writeFileSync(join(tmp, ".cursorrules"), "");
+    expect(detectEditors(tmp)).toEqual(["cursor"]);
+  });
+
+  it("detects cursor when .cursor/ directory exists", () => {
+    mkdirSync(join(tmp, ".cursor"));
+    expect(detectEditors(tmp)).toEqual(["cursor"]);
+  });
+
+  it("detects both editors when both signals present", () => {
+    writeFileSync(join(tmp, "CLAUDE.md"), "");
+    writeFileSync(join(tmp, ".cursorrules"), "");
+    const result = detectEditors(tmp);
+    expect(result).toContain("claude");
+    expect(result).toContain("cursor");
+    expect(result.length).toBe(2);
+  });
+
+  it("returns empty array when neither editor is detected", () => {
+    expect(detectEditors(tmp)).toEqual([]);
   });
 });

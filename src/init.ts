@@ -82,6 +82,33 @@ When the user asks ANYTHING about memory, decisions, project context, tasks, pas
 This rule is non-negotiable.
 `;
 
+/** Editors that `init` can generate rules for. */
+export type Editor = "claude" | "cursor";
+
+/**
+ * Detect which editors a project uses by checking for filesystem signals
+ * in the given cwd. Returns an array; empty if no editor detected.
+ *
+ * Cursor signals: `.cursor/` directory OR `.cursorrules` file.
+ * Claude signals: `CLAUDE.md` file OR `.claude/` directory.
+ */
+export function detectEditors(cwd: string): Editor[] {
+  const detected: Editor[] = [];
+  if (
+    existsSync(join(cwd, "CLAUDE.md")) ||
+    existsSync(join(cwd, ".claude"))
+  ) {
+    detected.push("claude");
+  }
+  if (
+    existsSync(join(cwd, ".cursorrules")) ||
+    existsSync(join(cwd, ".cursor"))
+  ) {
+    detected.push("cursor");
+  }
+  return detected;
+}
+
 export type InitAction = "created" | "appended" | "already-present";
 export interface InitResult {
   action: InitAction;
