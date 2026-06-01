@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, rmSync, writeFileSync, readFileSync, existsSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
-import { runInit, INIT_MARKER, INIT_TEMPLATE } from "../src/init.js";
+import { runInit, INIT_MARKER, CLAUDE_TEMPLATE } from "../src/init.js";
 
 describe("runInit", () => {
   let tmp: string;
@@ -43,7 +43,7 @@ describe("runInit", () => {
 
   it("is idempotent when CLAUDE.md already has our section", () => {
     const claudeMdPath = join(tmp, "CLAUDE.md");
-    writeFileSync(claudeMdPath, INIT_TEMPLATE);
+    writeFileSync(claudeMdPath, CLAUDE_TEMPLATE);
 
     const result = runInit(tmp);
     expect(result.action).toBe("already-present");
