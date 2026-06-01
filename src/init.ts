@@ -173,39 +173,45 @@ export function runInit(cwd: string, options?: InitOptions): InitResult[] {
 }
 
 /**
- * CLI wrapper — prints a friendly message and returns the result.
+ * CLI wrapper — prints a friendly message per file and returns the results.
  * Caller is responsible for process.exit().
  */
-export function runInitCLI(cwd: string): InitResult {
-  const results = runInit(cwd);
-  const result = results[0]; // Task 4 refactors this to iterate
+export function runInitCLI(cwd: string, options?: InitOptions): InitResult[] {
+  const results = runInit(cwd, options);
   const reset = "\x1b[0m";
   const green = "\x1b[32m";
   const yellow = "\x1b[33m";
   const dim = "\x1b[2m";
 
-  switch (result.action) {
-    case "created":
-      console.log(
-        `${green}✓ Created${reset} ${result.path}\n` +
-          `\nClaude Code will now use ContextForge MCP for memory in this directory.\n` +
-          `${dim}Open Claude Code here and try: "what did we save about <topic>?"${reset}`,
-      );
-      break;
-    case "appended":
-      console.log(
-        `${green}✓ Appended ContextForge section to${reset} ${result.path}\n` +
-          `\nYour existing CLAUDE.md was preserved; our memory rules were added.\n` +
-          `${dim}Restart Claude Code in this directory to pick up the change.${reset}`,
-      );
-      break;
-    case "already-present":
-      console.log(
-        `${yellow}ContextForge section is already present in${reset} ${result.path}\n` +
-          `${dim}No changes made.${reset}`,
-      );
-      break;
+  for (const result of results) {
+    const editorName = result.editor === "claude" ? "Claude Code" : "Cursor";
+    switch (result.action) {
+      case "created":
+        console.log(
+          `${green}✓ Created${reset} ${result.path}\n` +
+            `  ${editorName} will now use ContextForge MCP for memory in this directory.\n`,
+        );
+        break;
+      case "appended":
+        console.log(
+          `${green}✓ Appended ContextForge section to${reset} ${result.path}\n` +
+            `  Your existing file was preserved; our memory rules were added.\n`,
+        );
+        break;
+      case "already-present":
+        console.log(
+          `${yellow}ContextForge section is already present in${reset} ${result.path}\n` +
+            `  ${dim}No changes made.${reset}\n`,
+        );
+        break;
+    }
   }
 
-  return result;
+  if (results.length > 1) {
+    console.log(
+      `${dim}Restart your editor(s) in this directory to pick up changes.${reset}`,
+    );
+  }
+
+  return results;
 }

@@ -65,7 +65,28 @@ const VERSION: string = pkg.version;
 // ============ CLI subcommand: `contextforge-mcp init` ============
 // Must run BEFORE any MCP server setup, since this exits the process.
 if (process.argv[2] === "init") {
-  runInitCLI(process.cwd());
+  const editorArg = process.argv
+    .slice(3)
+    .find((a) => a.startsWith("--editor="));
+
+  const editorValue = editorArg ? editorArg.slice("--editor=".length) : undefined;
+
+  if (
+    editorValue !== undefined &&
+    editorValue !== "claude" &&
+    editorValue !== "cursor" &&
+    editorValue !== "all"
+  ) {
+    console.error(
+      `Invalid --editor value: ${editorValue}. Valid: claude, cursor, all.`,
+    );
+    process.exit(1);
+  }
+
+  runInitCLI(
+    process.cwd(),
+    editorValue ? { editor: editorValue as "claude" | "cursor" | "all" } : undefined,
+  );
   process.exit(0);
 }
 
