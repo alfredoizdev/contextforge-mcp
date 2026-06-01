@@ -110,32 +110,66 @@ export function detectEditors(cwd: string): Editor[] {
 }
 
 export type InitAction = "created" | "appended" | "already-present";
+
 export interface InitResult {
+  editor: Editor;
   action: InitAction;
   path: string;
 }
 
-/**
- * Pure-logic init: writes or appends CLAUDE_TEMPLATE to CLAUDE.md in the given cwd.
- * Idempotent via INIT_MARKER sentinel.
- */
-export function runInit(cwd: string): InitResult {
-  const claudeMdPath = join(cwd, "CLAUDE.md");
+export interface InitOptions {
+  /**
+   * Force a specific editor or all of them. When undefined, the editors
+   * are auto-detected via detectEditors(). If detection finds nothing,
+   * both editors are generated as a zero-friction default.
+   */
+  editor?: Editor | "all";
+}
 
-  if (!existsSync(claudeMdPath)) {
-    writeFileSync(claudeMdPath, CLAUDE_TEMPLATE);
-    return { action: "created", path: claudeMdPath };
+const EDITOR_FILES: Record<Editor, { fileName: string; template: string }> = {
+  claude: { fileName: "CLAUDE.md", template: CLAUDE_TEMPLATE },
+  cursor: { fileName: ".cursorrules", template: CURSOR_TEMPLATE },
+};
+
+function resolveEditors(cwd: string, options?: InitOptions): Editor[] {
+  if (options?.editor === "all") return ["claude", "cursor"];
+  if (options?.editor === "claude" || options?.editor === "cursor") {
+    return [options.editor];
+  }
+  const detected = detectEditors(cwd);
+  return detected.length > 0 ? detected : ["claude", "cursor"];
+}
+
+function applyTemplate(cwd: string, editor: Editor): InitResult {
+  const { fileName, template } = EDITOR_FILES[editor];
+  const filePath = join(cwd, fileName);
+
+  if (!existsSync(filePath)) {
+    writeFileSync(filePath, template);
+    return { editor, action: "created", path: filePath };
   }
 
-  const existing = readFileSync(claudeMdPath, "utf-8");
+  const existing = readFileSync(filePath, "utf-8");
   if (existing.includes(INIT_MARKER)) {
-    return { action: "already-present", path: claudeMdPath };
+    return { editor, action: "already-present", path: filePath };
   }
 
   const trimmed = existing.endsWith("\n") ? existing : existing + "\n";
-  const combined = trimmed + "\n" + CLAUDE_TEMPLATE;
-  writeFileSync(claudeMdPath, combined);
-  return { action: "appended", path: claudeMdPath };
+  const combined = trimmed + "\n" + template;
+  writeFileSync(filePath, combined);
+  return { editor, action: "appended", path: filePath };
+}
+
+/**
+ * Pure-logic init: writes or appends the appropriate template to each
+ * detected (or explicitly requested) editor's rules file in the given cwd.
+ * Idempotent via INIT_MARKER sentinel.
+ *
+ * @returns one InitResult per editor processed.
+ */
+export function runInit(cwd: string, options?: InitOptions): InitResult[] {
+  const editors = resolveEditors(cwd, options);
+  return editors.map((editor) => applyTemplate(cwd, editor));
 }
 
 /**
@@ -143,7 +177,8 @@ export function runInit(cwd: string): InitResult {
  * Caller is responsible for process.exit().
  */
 export function runInitCLI(cwd: string): InitResult {
-  const result = runInit(cwd);
+  const results = runInit(cwd);
+  const result = results[0]; // Task 4 refactors this to iterate
   const reset = "\x1b[0m";
   const green = "\x1b[32m";
   const yellow = "\x1b[33m";
