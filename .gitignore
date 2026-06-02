@@ -35,3 +35,6 @@ Thumbs.db
 
 # Misc
 *.tgz
+
+# Internal workflow docs (superpowers skill artifacts)
+docs/superpowers/
