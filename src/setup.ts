@@ -233,6 +233,14 @@ async function runSetup() {
   // Use Claude CLI if available, otherwise show manual instructions
   if (hasClaudeCLI) {
     try {
+      // `claude mcp add` refuses to overwrite an existing server, so remove any
+      // existing entry first. Ignore the error if it isn't configured yet.
+      try {
+        execSync('claude mcp remove contextforge', { stdio: 'pipe' });
+      } catch {
+        // Not configured yet — nothing to remove.
+      }
+
       // Run claude mcp add command
       const command = `claude mcp add contextforge -s user -e CONTEXTFORGE_API_KEY=${apiKey} -- contextforge-mcp`;
 
@@ -264,6 +272,12 @@ async function runSetup() {
         const newApiKey = await askQuestion(rl, `Enter your ContextForge API key: `);
         if (newApiKey && newApiKey.length >= 10) {
           try {
+            // Remove first so the new (different) key overwrites the old entry.
+            try {
+              execSync('claude mcp remove contextforge', { stdio: 'pipe' });
+            } catch {
+              // Not configured yet — nothing to remove.
+            }
             const retryCommand = `claude mcp add contextforge -s user -e CONTEXTFORGE_API_KEY=${newApiKey} -- contextforge-mcp`;
             execSync(retryCommand, { stdio: 'inherit' });
             print('');
@@ -329,6 +343,7 @@ function printManualInstructions(apiKey: string) {
   print(`${colors.cyan}Option 1: Using Claude CLI${colors.reset}`);
   print(`First install Claude CLI, then run:`);
   print('');
+  printDim(`  claude mcp remove contextforge   # skip if not yet configured`);
   printDim(`  claude mcp add contextforge -s user -e CONTEXTFORGE_API_KEY=${apiKey} -- contextforge-mcp`);
   print('');
   print(`${colors.cyan}Option 2: Edit config manually${colors.reset}`);
