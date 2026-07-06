@@ -1785,10 +1785,11 @@ async function main() {
   const originalHandler = async (request: any) => {
     const { name, arguments: args } = request.params;
     const startTime = Date.now();
-    // Fire-and-forget presence registration; failures are swallowed inside.
-    void presence.ensureRegistered();
 
     try {
+      // Fire-and-forget presence registration; failures are swallowed inside.
+      void presence.ensureRegistered();
+
       switch (name) {
         case "memory_ingest": {
           const input = IngestInputSchema.parse(args);
