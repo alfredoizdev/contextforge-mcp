@@ -55,8 +55,10 @@ import { resolveTaskId, resolveTaskTitle, resolveTaskIdentifier } from "./task-p
 
 import { appendFileSync } from "fs";
 import { createRequire } from "module";
+import { basename } from "path";
 import { checkForUpdates, getUpdateNotice } from "./update-checker.js";
 import { runInitCLI } from "./init.js";
+import { SessionPresence } from "./session-presence.js";
 
 const require = createRequire(import.meta.url);
 const pkg = require("../package.json");
@@ -1680,6 +1682,49 @@ const TOOLS = [
       required: ["id"],
     },
   },
+  {
+    name: "session_update",
+    description:
+      "Declare or update what THIS Claude Code session is currently working on (live presence). Call it when you start or switch tasks so parallel sessions can avoid stepping on your work. Example focus: 'working on the auth module'.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        focus: {
+          type: "string",
+          description: "Short human-readable description of the current work",
+        },
+        label: {
+          type: "string",
+          description: "Optional session name (defaults to the working directory name)",
+        },
+      },
+      required: ["focus"],
+    },
+  },
+  {
+    name: "session_list",
+    description:
+      "List OTHER live Claude Code sessions in this organization/project and what each is working on right now. Use it at conversation start (and before big changes) to avoid conflicts with parallel sessions. Sessions expire automatically ~10 minutes after their last heartbeat.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        project: {
+          type: "string",
+          description: "Optional project id or name to filter by",
+        },
+        include_stale: {
+          type: "boolean",
+          description: "Also include sessions whose heartbeat is older than the 10-minute TTL",
+        },
+      },
+    },
+  },
+  {
+    name: "session_end",
+    description:
+      "End THIS session's live presence explicitly (it also ends automatically when the process exits or after the heartbeat TTL).",
+    inputSchema: { type: "object", properties: {} },
+  },
 ];
 
 // ============ Main Server ============
@@ -1687,6 +1732,16 @@ const TOOLS = [
 async function main() {
   const config = loadConfig();
   const apiClient = new ApiClient(config);
+
+  // Live session presence: one MCP process == one Claude Code session.
+  // Registration is lazy (first tool call); heartbeat + exit hooks are
+  // automatic. All of it is best-effort — never blocks a tool.
+  const linkedProject = readProjectLinkConfig();
+  const presence = new SessionPresence(apiClient, {
+    projectId: linkedProject?.project_id,
+    label: basename(process.cwd()),
+  });
+  presence.installExitHooks();
 
   // Startup banner
   console.error("");
@@ -1730,6 +1785,8 @@ async function main() {
   const originalHandler = async (request: any) => {
     const { name, arguments: args } = request.params;
     const startTime = Date.now();
+    // Fire-and-forget presence registration; failures are swallowed inside.
+    void presence.ensureRegistered();
 
     try {
       switch (name) {
@@ -4095,6 +4152,103 @@ https://github.com/alfredoizdev/contextforge-mcp
                 type: "text" as const,
                 text: `🗑 Routine deleted: ${input.id}`,
               },
+            ],
+          };
+        }
+
+        case "session_update": {
+          logTool(name);
+          const focus =
+            typeof args === "object" && args !== null && "focus" in args
+              ? String(args.focus).trim()
+              : "";
+          if (!focus) {
+            return {
+              content: [
+                { type: "text" as const, text: "Error: 'focus' is required — describe what this session is working on." },
+              ],
+              isError: true,
+            };
+          }
+          const label =
+            typeof args === "object" && args !== null && "label" in args && args.label
+              ? String(args.label)
+              : undefined;
+
+          const session = await presence.updateFocus(focus, label);
+          const elapsed = Date.now() - startTime;
+          if (!session) {
+            logSuccess(`Presence unavailable in ${elapsed}ms`);
+            return {
+              content: [
+                {
+                  type: "text" as const,
+                  text: "Presence is unavailable right now (registration failed) — memory tools are unaffected. It will retry automatically.",
+                },
+              ],
+            };
+          }
+          logSuccess(`Focus updated in ${elapsed}ms`);
+          return {
+            content: [
+              {
+                type: "text" as const,
+                text: JSON.stringify(
+                  { session, message: `🟢 Presence updated: ${focus}` },
+                  null,
+                  2,
+                ),
+              },
+            ],
+          };
+        }
+
+        case "session_list": {
+          logTool(name);
+          const includeStale =
+            typeof args === "object" && args !== null && "include_stale" in args
+              ? Boolean(args.include_stale)
+              : false;
+          let projectId: string | undefined;
+          if (typeof args === "object" && args !== null && "project" in args && args.project) {
+            projectId = await apiClient.resolveProjectId(String(args.project));
+          }
+
+          const all = await apiClient.listSessions({ projectId, includeStale });
+          // Peers only: this session's own row is noise here.
+          const own = presence.getSessionId();
+          const sessions = all.filter((s) => s.id !== own);
+          const elapsed = Date.now() - startTime;
+          logSuccess(`Listed ${sessions.length} peer session(s) in ${elapsed}ms`);
+
+          return {
+            content: [
+              {
+                type: "text" as const,
+                text: JSON.stringify(
+                  {
+                    sessions,
+                    message:
+                      sessions.length === 0
+                        ? "No other active sessions right now."
+                        : `🟢 ${sessions.length} other active session(s) — check 'focus' before touching the same areas.`,
+                  },
+                  null,
+                  2,
+                ),
+              },
+            ],
+          };
+        }
+
+        case "session_end": {
+          logTool(name);
+          await presence.end();
+          const elapsed = Date.now() - startTime;
+          logSuccess(`Session presence ended in ${elapsed}ms`);
+          return {
+            content: [
+              { type: "text" as const, text: "👋 Session presence ended." },
             ],
           };
         }

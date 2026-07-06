@@ -212,6 +212,24 @@ ContextForge provides tools for **Knowledge Management**, **GitHub Integration**
 
 ---
 
+## Session Presence (multi-session coordination)
+
+Running several Claude Code sessions in parallel (worktrees, agent teams)?
+Each MCP process automatically registers itself as a live session and
+heartbeats while it runs — dead sessions expire ~10 minutes after their
+last heartbeat. Three tools let the agent coordinate:
+
+| Tool | What it does |
+|------|--------------|
+| `session_update` | Declare what this session is working on ("working on the auth module") |
+| `session_list` | See other live sessions and their focus before touching shared areas |
+| `session_end` | Explicitly end this session's presence (also automatic on exit) |
+
+Recommended pattern for your CLAUDE.md: call `session_list` when a
+conversation starts; call `session_update` when starting or switching tasks.
+
+---
+
 ## Natural Language Examples
 
 You don't need to memorize commands — just talk naturally to your AI:
