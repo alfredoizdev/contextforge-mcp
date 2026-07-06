@@ -38,6 +38,12 @@ export class SessionPresence {
           label: this.defaults.label,
         })
         .then((session) => {
+          if (this.ended) {
+            // end() raced ahead of an in-flight registration: clean up the
+            // just-created session instead of adopting it.
+            void this.client.endSession(session.id).catch(() => {});
+            return;
+          }
           this.sessionId = session.id;
           this.startHeartbeat();
         })

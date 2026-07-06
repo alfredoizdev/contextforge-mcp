@@ -111,4 +111,21 @@ describe('SessionPresence', () => {
     await presence.end();
     expect(client.endSession).not.toHaveBeenCalled();
   });
+
+  it('end() during in-flight registration cleans up the orphaned session', async () => {
+    const client = makeClient();
+    let resolveRegister!: (s: typeof SESSION) => void;
+    client.registerSession.mockImplementation(
+      () => new Promise((res) => { resolveRegister = res; }),
+    );
+    const presence = new SessionPresence(client as never);
+    const inFlight = presence.ensureRegistered();
+    await presence.end();
+    resolveRegister(SESSION);
+    await inFlight;
+    expect(presence.getSessionId()).toBeNull();
+    expect(client.endSession).toHaveBeenCalledWith(SESSION.id);
+    await vi.advanceTimersByTimeAsync(HEARTBEAT_INTERVAL_MS * 2);
+    expect(client.updateSession).not.toHaveBeenCalled();
+  });
 });
