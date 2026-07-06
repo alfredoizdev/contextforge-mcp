@@ -2,6 +2,7 @@ import type { ApiClient } from "./api-client.js";
 import type { AgentSession } from "./types.js";
 
 export const HEARTBEAT_INTERVAL_MS = 2 * 60 * 1000;
+export const EXIT_FLUSH_TIMEOUT_MS = 2000;
 
 /**
  * Best-effort live-presence lifecycle for this MCP process. One process ==
@@ -95,11 +96,20 @@ export class SessionPresence {
 
   /** Best-effort end when the Claude Code session goes away. */
   installExitHooks(): void {
-    const onExit = () => {
-      void this.end();
+    const onSignal = () => {
+      // Registering a signal handler suppresses Node's default terminate
+      // action, so after the best-effort end we must exit ourselves —
+      // bounded by a short timeout so a hung DELETE can't block shutdown.
+      const timeout = new Promise<void>((resolve) => {
+        const t = setTimeout(resolve, EXIT_FLUSH_TIMEOUT_MS);
+        t.unref?.();
+      });
+      void Promise.race([this.end(), timeout]).finally(() => process.exit(0));
     };
-    process.on("SIGINT", onExit);
-    process.on("SIGTERM", onExit);
-    process.stdin.on("close", onExit);
+    process.once("SIGINT", onSignal);
+    process.once("SIGTERM", onSignal);
+    process.stdin.on("close", () => {
+      void this.end();
+    });
   }
 }
