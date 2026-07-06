@@ -42,6 +42,7 @@ import type {
   ProjectLinkConfig,
   LinkProjectResponse,
   CurrentProjectResponse,
+  AgentSession,
 } from "./types.js";
 
 // ============ Project Linking Config ============
@@ -1862,5 +1863,53 @@ export class ApiClient {
       },
     );
     return (res as any)?.data ?? res;
+  }
+
+  // ============ Session presence ============
+
+  async registerSession(input: {
+    project_id?: string;
+    label?: string;
+    focus?: string;
+  }): Promise<AgentSession> {
+    const response = await this.request<{ session: AgentSession }>(
+      "POST",
+      "/functions/v1/sessions",
+      input,
+    );
+    return response.session;
+  }
+
+  async updateSession(
+    sessionId: string,
+    input: { focus?: string; label?: string } = {},
+  ): Promise<AgentSession> {
+    const response = await this.request<{ session: AgentSession }>(
+      "PATCH",
+      `/functions/v1/sessions/${sessionId}`,
+      input,
+    );
+    return response.session;
+  }
+
+  async listSessions(
+    options: { projectId?: string; includeStale?: boolean } = {},
+  ): Promise<AgentSession[]> {
+    const params = new URLSearchParams();
+    if (options.projectId) params.set("project_id", options.projectId);
+    if (options.includeStale) params.set("include_stale", "true");
+    const qs = params.toString();
+    const response = await this.request<{ sessions: AgentSession[] }>(
+      "GET",
+      `/functions/v1/sessions${qs ? `?${qs}` : ""}`,
+    );
+    return response.sessions ?? [];
+  }
+
+  async endSession(sessionId: string): Promise<{ success: boolean }> {
+    return this.request<{ success: boolean }>(
+      "DELETE",
+      `/functions/v1/sessions/${sessionId}`,
+    );
   }
 }
