@@ -128,4 +128,41 @@ describe('SessionPresence', () => {
     await vi.advanceTimersByTimeAsync(HEARTBEAT_INTERVAL_MS * 2);
     expect(client.updateSession).not.toHaveBeenCalled();
   });
+
+  it('installExitHooks: SIGTERM triggers end() then process.exit(0)', async () => {
+    const client = makeClient();
+    const presence = new SessionPresence(client as never);
+    await presence.ensureRegistered();
+
+    // Capture signal handlers registered via process.once (the fixed API)
+    const capturedHandlers: Partial<Record<string, () => void>> = {};
+    vi.spyOn(process, 'once').mockImplementation(((
+      event: string,
+      handler: () => void,
+    ) => {
+      capturedHandlers[event] = handler;
+      return process;
+    }) as never);
+    vi.spyOn(process.stdin, 'on').mockImplementation((() => process.stdin) as never);
+    const exitSpy = vi
+      .spyOn(process, 'exit')
+      .mockImplementation((() => undefined) as never);
+
+    presence.installExitHooks();
+
+    // After the fix, process.once('SIGTERM', …) must have been called
+    expect(capturedHandlers['SIGTERM']).toBeDefined();
+
+    // Invoke the captured SIGTERM handler
+    capturedHandlers['SIGTERM']!();
+
+    // Drain the microtask queue so the async promise chain settles
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(client.endSession).toHaveBeenCalledWith(SESSION.id);
+    expect(exitSpy).toHaveBeenCalledWith(0);
+  });
 });
