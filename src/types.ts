@@ -814,3 +814,19 @@ export const RoutinesDeleteInputSchema = z.object({
   id: z.string().uuid(),
 });
 export type RoutinesDeleteInput = z.infer<typeof RoutinesDeleteInputSchema>;
+
+// ============ Session Presence Types ============
+
+export interface AgentSession {
+  id: string;
+  project_id: string | null;
+  label: string | null;
+  focus: string | null;
+  status: "active" | "ended";
+  started_at: string;
+  last_heartbeat_at: string;
+  metadata: Record<string, unknown>;
+  // Enriched by GET /sessions
+  stale?: boolean;
+  seconds_since_heartbeat?: number;
+}
