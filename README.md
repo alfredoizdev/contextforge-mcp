@@ -216,8 +216,10 @@ ContextForge provides tools for **Knowledge Management**, **GitHub Integration**
 
 Running several Claude Code sessions in parallel (worktrees, agent teams)?
 Each MCP process automatically registers itself as a live session and
-heartbeats while it runs — dead sessions expire ~10 minutes after their
-last heartbeat. Three tools let the agent coordinate:
+heartbeats while it runs. On a clean exit the session is removed at once
+(a detached helper delivers the goodbye even while the host process is
+being killed); if the process dies hard, the session expires ~10 minutes
+after its last heartbeat. Three tools let the agent coordinate:
 
 | Tool | What it does |
 |------|--------------|
