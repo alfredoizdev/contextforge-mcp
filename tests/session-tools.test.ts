@@ -42,6 +42,17 @@ describe('session presence wiring (static)', () => {
     expect(body.includes('No project matches')).toBe(true);
   });
 
+  it('session_list defaults to the current project, with an all_projects escape', () => {
+    const listCase = indexSrc.slice(indexSrc.indexOf('case "session_list"'));
+    const body = listCase.slice(0, listCase.indexOf('case "session_end"'));
+    // default scope uses this session's linked project
+    expect(body.includes('presence.getDefaultProjectId()')).toBe(true);
+    // all_projects widens back to org-wide
+    expect(body.includes('all_projects')).toBe(true);
+    // the tool advertises both the project arg and all_projects
+    expect(indexSrc.includes('all_projects: true to see')).toBe(true);
+  });
+
   it('session_update gives an honest message after the session was ended', () => {
     const updateCase = indexSrc.slice(indexSrc.indexOf('case "session_update"'));
     const body = updateCase.slice(0, updateCase.indexOf('case "session_list"'));
@@ -49,9 +60,9 @@ describe('session presence wiring (static)', () => {
     expect(body.includes("won't be recreated until the MCP process restarts")).toBe(true);
   });
 
-  it('bumps 0.3.2 everywhere (package.json + both server.json fields)', () => {
-    expect(pkg.version).toBe('0.3.2');
-    expect(serverJson.version).toBe('0.3.2');
-    expect(serverJson.packages[0].version).toBe('0.3.2');
+  it('bumps 0.3.3 everywhere (package.json + both server.json fields)', () => {
+    expect(pkg.version).toBe('0.3.3');
+    expect(serverJson.version).toBe('0.3.3');
+    expect(serverJson.packages[0].version).toBe('0.3.3');
   });
 });

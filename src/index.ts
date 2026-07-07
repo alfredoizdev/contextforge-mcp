@@ -1704,13 +1704,17 @@ const TOOLS = [
   {
     name: "session_list",
     description:
-      "List OTHER live Claude Code sessions in this organization/project and what each is working on right now. Use it at conversation start (and before big changes) to avoid conflicts with parallel sessions. Sessions expire automatically ~10 minutes after their last heartbeat.",
+      "List OTHER live Claude Code sessions working on the same project right now, and what each is focused on. By default it is scoped to THIS session's project (the one linked in the current directory) — that's where work actually collides. Use it at conversation start and before big changes to avoid stepping on parallel sessions. Pass a specific `project` to scope elsewhere, or `all_projects: true` to see every session across the organization. Sessions expire automatically ~10 minutes after their last heartbeat.",
     inputSchema: {
       type: "object",
       properties: {
         project: {
           type: "string",
-          description: "Optional project id or name to filter by",
+          description: "Scope to a specific project id or name instead of the current one",
+        },
+        all_projects: {
+          type: "boolean",
+          description: "List sessions across the whole organization instead of just the current project",
         },
         include_stale: {
           type: "boolean",
@@ -4214,7 +4218,18 @@ https://github.com/alfredoizdev/contextforge-mcp
             typeof args === "object" && args !== null && "include_stale" in args
               ? Boolean(args.include_stale)
               : false;
+          const allProjects =
+            typeof args === "object" && args !== null && "all_projects" in args
+              ? Boolean(args.all_projects)
+              : false;
+
+          // Scope resolution:
+          //  - explicit `project`  → that project (404-note if it doesn't resolve)
+          //  - `all_projects`      → org-wide
+          //  - default             → this session's own project, when linked;
+          //                          otherwise org-wide (nothing to scope to)
           let projectId: string | undefined;
+          let scope: "named" | "current" | "org" = "org";
           if (typeof args === "object" && args !== null && "project" in args && args.project) {
             const requested = String(args.project);
             projectId = await apiClient.resolveProjectId(requested);
@@ -4231,6 +4246,10 @@ https://github.com/alfredoizdev/contextforge-mcp
                 ],
               };
             }
+            scope = "named";
+          } else if (!allProjects) {
+            projectId = presence.getDefaultProjectId();
+            if (projectId) scope = "current";
           }
 
           // Populate our own session id before filtering so we never list
@@ -4244,17 +4263,31 @@ https://github.com/alfredoizdev/contextforge-mcp
           const elapsed = Date.now() - startTime;
           logSuccess(`Listed ${sessions.length} peer session(s) in ${elapsed}ms`);
 
+          // Name the scope so the agent knows whether "none" means "none in
+          // this project" or "none anywhere", and can widen with all_projects.
+          const scopeLabel =
+            scope === "current"
+              ? "in this project"
+              : scope === "named"
+                ? "in that project"
+                : "across the organization";
+          const emptyMsg =
+            scope === "current"
+              ? "No other active sessions in this project right now. (Pass all_projects: true to see the whole organization.)"
+              : `No other active sessions ${scopeLabel} right now.`;
+
           return {
             content: [
               {
                 type: "text" as const,
                 text: JSON.stringify(
                   {
+                    scope: scopeLabel,
                     sessions,
                     message:
                       sessions.length === 0
-                        ? "No other active sessions right now."
-                        : `🟢 ${sessions.length} other active session(s) — check 'focus' before touching the same areas.`,
+                        ? emptyMsg
+                        : `🟢 ${sessions.length} other active session(s) ${scopeLabel} — check 'focus' before touching the same areas.`,
                   },
                   null,
                   2,
