@@ -136,6 +136,83 @@ describe('SessionPresence', () => {
     expect(client.updateSession).not.toHaveBeenCalled();
   });
 
+  it('isEnded() reflects the ended latch', async () => {
+    const client = makeClient();
+    const presence = new SessionPresence(client as never);
+    expect(presence.isEnded()).toBe(false);
+    await presence.ensureRegistered();
+    await presence.end();
+    expect(presence.isEnded()).toBe(true);
+  });
+
+  it('updateFocus after end() resumes presence (re-registers a fresh session)', async () => {
+    const client = makeClient();
+    const presence = new SessionPresence(client as never);
+    await presence.ensureRegistered();
+    await presence.end();
+    expect(client.registerSession).toHaveBeenCalledTimes(1);
+
+    const session = await presence.updateFocus('back to work');
+    expect(session).not.toBeNull();
+    expect(presence.isEnded()).toBe(false);
+    // exactly one fresh registration — never two concurrent sessions
+    expect(client.registerSession).toHaveBeenCalledTimes(2);
+    expect(client.updateSession).toHaveBeenCalledWith(SESSION.id, {
+      focus: 'back to work',
+    });
+  });
+
+  it('does not resume while an end()-triggered registration is still in flight', async () => {
+    const client = makeClient();
+    let resolveRegister!: (s: typeof SESSION) => void;
+    client.registerSession.mockImplementation(
+      () => new Promise((res) => { resolveRegister = res; }),
+    );
+    const presence = new SessionPresence(client as never);
+    presence.ensureRegistered(); // in-flight
+    await presence.end();
+    // update while registration still pending: must NOT spawn a 2nd register
+    const pending = presence.updateFocus('too soon');
+    resolveRegister(SESSION);
+    const session = await pending;
+    expect(session).toBeNull();
+    expect(client.registerSession).toHaveBeenCalledTimes(1);
+  });
+
+  it('heartbeat stops after repeated consecutive failures (circuit breaker)', async () => {
+    const client = makeClient();
+    client.updateSession.mockRejectedValue(new Error('key revoked'));
+    const presence = new SessionPresence(client as never);
+    await presence.ensureRegistered();
+    // drive many intervals; the breaker must clear the timer, not beat forever
+    for (let i = 0; i < 10; i++) {
+      await vi.advanceTimersByTimeAsync(HEARTBEAT_INTERVAL_MS);
+    }
+    const beats = client.updateSession.mock.calls.length;
+    expect(beats).toBeGreaterThan(0);
+    expect(beats).toBeLessThanOrEqual(5);
+    // once tripped, no further beats ever
+    await vi.advanceTimersByTimeAsync(HEARTBEAT_INTERVAL_MS * 20);
+    expect(client.updateSession.mock.calls.length).toBe(beats);
+  });
+
+  it('a successful heartbeat resets the failure counter', async () => {
+    const client = makeClient();
+    client.updateSession
+      .mockRejectedValueOnce(new Error('blip'))
+      .mockRejectedValueOnce(new Error('blip'))
+      .mockResolvedValueOnce(SESSION) // recovery
+      .mockRejectedValue(new Error('blip again'));
+    const presence = new SessionPresence(client as never);
+    await presence.ensureRegistered();
+    for (let i = 0; i < 12; i++) {
+      await vi.advanceTimersByTimeAsync(HEARTBEAT_INTERVAL_MS);
+    }
+    // recovery in the middle means the breaker needs a fresh failure streak,
+    // so total beats exceed the bare 5-failure trip
+    expect(client.updateSession.mock.calls.length).toBeGreaterThan(5);
+  });
+
   it('installExitHooks: SIGTERM triggers end() then process.exit(0)', async () => {
     const client = makeClient();
     const presence = new SessionPresence(client as never);
@@ -239,6 +316,8 @@ describe('SessionPresence detached exit flush', () => {
       `https://api.example.co/functions/v1/sessions/${SESSION.id}`,
     );
     expect(options.env.CF_SESSION_END_KEY).toBe('cf_live_secret');
+    // Windows: never flash a console window for the helper.
+    expect(options.windowsHide).toBe(true);
     expect(child.unref).toHaveBeenCalled();
     // synchronous exit — no in-process DELETE racing the SIGKILL
     expect(exitSpy).toHaveBeenCalledWith(0);

@@ -4186,13 +4186,11 @@ https://github.com/alfredoizdev/contextforge-mcp
           const elapsed = Date.now() - startTime;
           if (!session) {
             logSuccess(`Presence unavailable in ${elapsed}ms`);
+            const text = presence.isEnded()
+              ? "Presence was ended for this session and won't be recreated until the MCP process restarts. Memory tools are unaffected."
+              : "Presence is unavailable right now (registration failed) — memory tools are unaffected. It will retry automatically.";
             return {
-              content: [
-                {
-                  type: "text" as const,
-                  text: "Presence is unavailable right now (registration failed) — memory tools are unaffected. It will retry automatically.",
-                },
-              ],
+              content: [{ type: "text" as const, text }],
             };
           }
           logSuccess(`Focus updated in ${elapsed}ms`);
@@ -4218,9 +4216,27 @@ https://github.com/alfredoizdev/contextforge-mcp
               : false;
           let projectId: string | undefined;
           if (typeof args === "object" && args !== null && "project" in args && args.project) {
-            projectId = await apiClient.resolveProjectId(String(args.project));
+            const requested = String(args.project);
+            projectId = await apiClient.resolveProjectId(requested);
+            if (!projectId) {
+              // A filter was asked for but didn't resolve — returning an
+              // unfiltered org-wide list would falsely imply those peers are
+              // in this project.
+              return {
+                content: [
+                  {
+                    type: "text" as const,
+                    text: `No project matches "${requested}" in this organization, so no sessions can be listed for it.`,
+                  },
+                ],
+              };
+            }
           }
 
+          // Populate our own session id before filtering so we never list
+          // ourselves as a peer on the first tool call (registration is
+          // fired fire-and-forget on the same call and may not have resolved).
+          await presence.ensureRegistered();
           const all = await apiClient.listSessions({ projectId, includeStale });
           // Peers only: this session's own row is noise here.
           const own = presence.getSessionId();

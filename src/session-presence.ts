@@ -4,11 +4,20 @@ import type { AgentSession } from "./types.js";
 
 export const HEARTBEAT_INTERVAL_MS = 2 * 60 * 1000;
 export const EXIT_FLUSH_TIMEOUT_MS = 2000;
+// Stop heartbeating after this many consecutive failures (~10 min of a dead
+// key); the server TTL then reclaims the row. Prevents a revoked key from
+// beating forever every 2 minutes for the life of the process.
+export const MAX_HEARTBEAT_FAILURES = 5;
 
 export type DetachedSpawner = (
   command: string,
   args: string[],
-  options: { detached: boolean; stdio: "ignore"; env: Record<string, string> },
+  options: {
+    detached: boolean;
+    stdio: "ignore";
+    windowsHide: boolean;
+    env: Record<string, string>;
+  },
 ) => { unref?: () => void };
 
 export interface ExitFlushConfig {
@@ -38,8 +47,10 @@ export const EXIT_FLUSH_HELPER_CODE =
 export class SessionPresence {
   private sessionId: string | null = null;
   private registering: Promise<void> | null = null;
+  private registerInFlight = false;
   private timer: ReturnType<typeof setInterval> | null = null;
   private ended = false;
+  private heartbeatFailures = 0;
 
   constructor(
     private readonly client: ApiClient,
@@ -51,16 +62,23 @@ export class SessionPresence {
     return this.sessionId;
   }
 
+  /** True once this session's presence has been explicitly ended. */
+  isEnded(): boolean {
+    return this.ended;
+  }
+
   /** Lazy registration; fire-and-forget from the tool-call path. */
   ensureRegistered(): Promise<void> {
     if (this.sessionId || this.ended) return Promise.resolve();
     if (!this.registering) {
+      this.registerInFlight = true;
       this.registering = this.client
         .registerSession({
           project_id: this.defaults.projectId,
           label: this.defaults.label,
         })
         .then((session) => {
+          this.registerInFlight = false;
           if (this.ended) {
             // end() raced ahead of an in-flight registration: clean up the
             // just-created session instead of adopting it.
@@ -73,6 +91,7 @@ export class SessionPresence {
         .catch(() => {
           // Swallow: presence must never break tools. Clearing the in-flight
           // marker lets a later tool call retry.
+          this.registerInFlight = false;
           this.registering = null;
         });
     }
@@ -81,11 +100,22 @@ export class SessionPresence {
 
   private startHeartbeat(): void {
     if (this.timer) return;
+    this.heartbeatFailures = 0;
     this.timer = setInterval(() => {
       if (!this.sessionId) return;
-      this.client.updateSession(this.sessionId).catch(() => {
-        // Swallow: the next beat (or the server TTL) handles it.
-      });
+      this.client.updateSession(this.sessionId).then(
+        () => {
+          this.heartbeatFailures = 0;
+        },
+        () => {
+          // Swallow, but give up after a sustained failure streak so a
+          // revoked key doesn't beat forever; the server TTL takes over.
+          if (++this.heartbeatFailures >= MAX_HEARTBEAT_FAILURES && this.timer) {
+            clearInterval(this.timer);
+            this.timer = null;
+          }
+        },
+      );
     }, HEARTBEAT_INTERVAL_MS);
     // Never keep the process alive just for presence.
     this.timer.unref?.();
@@ -93,6 +123,15 @@ export class SessionPresence {
 
   /** The agent's explicit touchpoint (session_update tool). */
   async updateFocus(focus: string, label?: string): Promise<AgentSession | null> {
+    // session_update after session_end: the agent wants presence back. Only
+    // resume when no registration is in flight, so we never race a pending
+    // register into two concurrent server sessions. Clearing `registering`
+    // (a stale resolved promise from the prior session) lets ensureRegistered
+    // start one fresh registration.
+    if (this.ended && !this.sessionId && !this.registerInFlight) {
+      this.ended = false;
+      this.registering = null;
+    }
     await this.ensureRegistered();
     if (!this.sessionId) return null;
     return this.client.updateSession(this.sessionId, {
@@ -132,6 +171,8 @@ export class SessionPresence {
       const child = spawner(process.execPath, ["-e", EXIT_FLUSH_HELPER_CODE], {
         detached: true,
         stdio: "ignore",
+        // Windows: don't flash a console window for the short-lived helper.
+        windowsHide: true,
         // Credentials travel through the child's env, never argv — argv is
         // visible to every user in `ps`. The parent env is inherited so the
         // helper keeps SystemRoot (Windows) and TLS/proxy vars.
