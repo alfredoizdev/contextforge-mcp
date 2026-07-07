@@ -1,5 +1,12 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { SessionPresence, HEARTBEAT_INTERVAL_MS } from '../src/session-presence.js';
+import { createServer } from 'node:http';
+import { spawn } from 'node:child_process';
+import type { AddressInfo } from 'node:net';
+import {
+  SessionPresence,
+  HEARTBEAT_INTERVAL_MS,
+  EXIT_FLUSH_HELPER_CODE,
+} from '../src/session-presence.js';
 
 const SESSION = {
   id: 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
@@ -315,5 +322,37 @@ describe('SessionPresence detached exit flush', () => {
     expect(spawner).toHaveBeenCalledTimes(1);
     expect(exitSpy).not.toHaveBeenCalled();
     expect(client.endSession).not.toHaveBeenCalled();
+  });
+
+  it('the helper code actually delivers the DELETE when run via node -e', async () => {
+    vi.useRealTimers();
+    const received: { method?: string; url?: string; auth?: string } = {};
+    const server = createServer((req, res) => {
+      received.method = req.method;
+      received.url = req.url;
+      received.auth = req.headers.authorization;
+      res.end('{}');
+    });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const port = (server.address() as AddressInfo).port;
+
+    await new Promise<void>((resolve, reject) => {
+      const child = spawn(process.execPath, ['-e', EXIT_FLUSH_HELPER_CODE], {
+        env: {
+          ...process.env,
+          CF_SESSION_END_URL: `http://127.0.0.1:${port}/functions/v1/sessions/${SESSION.id}`,
+          CF_SESSION_END_KEY: 'cf_live_secret',
+        },
+      });
+      child.on('error', reject);
+      child.on('exit', (code) =>
+        code === 0 ? resolve() : reject(new Error(`helper exited ${code}`)),
+      );
+    });
+    server.close();
+
+    expect(received.method).toBe('DELETE');
+    expect(received.url).toBe(`/functions/v1/sessions/${SESSION.id}`);
+    expect(received.auth).toBe('Bearer cf_live_secret');
   });
 });
