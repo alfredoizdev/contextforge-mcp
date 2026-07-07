@@ -1704,7 +1704,7 @@ const TOOLS = [
   {
     name: "session_list",
     description:
-      "List OTHER live Claude Code sessions working on the same project right now, and what each is focused on. By default it is scoped to THIS session's project (the one linked in the current directory) — that's where work actually collides. Use it at conversation start and before big changes to avoid stepping on parallel sessions. Pass a specific `project` to scope elsewhere, or `all_projects: true` to see every session across the organization. Sessions expire automatically ~10 minutes after their last heartbeat.",
+      "List OTHER live Claude Code sessions working on the same project right now, and what each is focused on. By default it is scoped to THIS session's project (the one linked in the current directory) — that's where work actually collides. If the current directory isn't linked to a project, it falls back to the whole organization. Use it at conversation start and before big changes to avoid stepping on parallel sessions. Pass a specific `project` to scope elsewhere, or `all_projects: true` to see every session across the organization. Sessions expire automatically ~10 minutes after their last heartbeat.",
     inputSchema: {
       type: "object",
       properties: {
@@ -1714,7 +1714,7 @@ const TOOLS = [
         },
         all_projects: {
           type: "boolean",
-          description: "List sessions across the whole organization instead of just the current project",
+          description: "List sessions across the whole organization instead of just the current project. Ignored when `project` is also provided.",
         },
         include_stale: {
           type: "boolean",
