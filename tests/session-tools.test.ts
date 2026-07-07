@@ -51,6 +51,11 @@ describe('session presence wiring (static)', () => {
     expect(body.includes('all_projects')).toBe(true);
     // the tool advertises both the project arg and all_projects
     expect(indexSrc.includes('all_projects: true to see')).toBe(true);
+    // explicit project takes precedence over all_projects (checked first)
+    expect(body.indexOf('"project" in args')).toBeGreaterThan(-1);
+    expect(body.indexOf('"project" in args')).toBeLessThan(
+      body.indexOf('!allProjects'),
+    );
   });
 
   it('session_update gives an honest message after the session was ended', () => {
