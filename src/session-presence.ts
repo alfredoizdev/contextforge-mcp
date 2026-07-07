@@ -62,6 +62,11 @@ export class SessionPresence {
     return this.sessionId;
   }
 
+  /** The project this session is linked to (from the cwd), if any. */
+  getDefaultProjectId(): string | undefined {
+    return this.defaults.projectId;
+  }
+
   /** True once this session's presence has been explicitly ended. */
   isEnded(): boolean {
     return this.ended;

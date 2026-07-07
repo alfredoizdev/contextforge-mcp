@@ -224,8 +224,12 @@ after its last heartbeat. Three tools let the agent coordinate:
 | Tool | What it does |
 |------|--------------|
 | `session_update` | Declare what this session is working on ("working on the auth module") |
-| `session_list` | See other live sessions and their focus before touching shared areas |
+| `session_list` | See other live sessions in the same project and their focus before touching shared areas (pass `all_projects: true` for the whole org) |
 | `session_end` | Explicitly end this session's presence (also automatic on exit) |
+
+By default `session_list` is scoped to the current project — where work
+actually collides. In a multi-project organization, pass `all_projects: true`
+to see every session, or `project: "<name-or-id>"` to scope elsewhere.
 
 Recommended pattern for your CLAUDE.md: call `session_list` when a
 conversation starts; call `session_update` when starting or switching tasks.
