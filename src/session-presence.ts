@@ -20,8 +20,8 @@ export interface ExitFlushConfig {
 
 // Runs in the detached helper: deliver the DELETE, then exit; the timeout is
 // a backstop so a hung request can't leave the helper lingering.
-const EXIT_FLUSH_HELPER_CODE =
-  "const t=setTimeout(()=>process.exit(1),5000);" +
+export const EXIT_FLUSH_HELPER_CODE =
+  "setTimeout(()=>process.exit(1),5000);" +
   'fetch(process.env.CF_SESSION_END_URL,{method:"DELETE",headers:{Authorization:"Bearer "+process.env.CF_SESSION_END_KEY}})' +
   ".catch(()=>{}).finally(()=>process.exit(0));";
 
@@ -133,8 +133,10 @@ export class SessionPresence {
         detached: true,
         stdio: "ignore",
         // Credentials travel through the child's env, never argv — argv is
-        // visible to every user in `ps`.
+        // visible to every user in `ps`. The parent env is inherited so the
+        // helper keeps SystemRoot (Windows) and TLS/proxy vars.
         env: {
+          ...process.env,
           CF_SESSION_END_URL: `${base}/functions/v1/sessions/${id}`,
           CF_SESSION_END_KEY: this.exitFlush.apiKey,
         },
