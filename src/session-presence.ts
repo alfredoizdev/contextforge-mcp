@@ -1,8 +1,29 @@
+import { spawn } from "node:child_process";
 import type { ApiClient } from "./api-client.js";
 import type { AgentSession } from "./types.js";
 
 export const HEARTBEAT_INTERVAL_MS = 2 * 60 * 1000;
 export const EXIT_FLUSH_TIMEOUT_MS = 2000;
+
+export type DetachedSpawner = (
+  command: string,
+  args: string[],
+  options: { detached: boolean; stdio: "ignore"; env: Record<string, string> },
+) => { unref?: () => void };
+
+export interface ExitFlushConfig {
+  baseUrl: string;
+  apiKey: string;
+  /** Test seam; defaults to child_process.spawn. */
+  spawner?: DetachedSpawner;
+}
+
+// Runs in the detached helper: deliver the DELETE, then exit; the timeout is
+// a backstop so a hung request can't leave the helper lingering.
+const EXIT_FLUSH_HELPER_CODE =
+  "const t=setTimeout(()=>process.exit(1),5000);" +
+  'fetch(process.env.CF_SESSION_END_URL,{method:"DELETE",headers:{Authorization:"Bearer "+process.env.CF_SESSION_END_KEY}})' +
+  ".catch(()=>{}).finally(()=>process.exit(0));";
 
 /**
  * Best-effort live-presence lifecycle for this MCP process. One process ==
@@ -23,6 +44,7 @@ export class SessionPresence {
   constructor(
     private readonly client: ApiClient,
     private readonly defaults: { projectId?: string; label?: string } = {},
+    private readonly exitFlush?: ExitFlushConfig,
   ) {}
 
   getSessionId(): string | null {
@@ -94,9 +116,52 @@ export class SessionPresence {
     }
   }
 
+  /**
+   * Hand the DELETE to a detached helper process that survives this
+   * process's SIGKILL. Returns false when the flush can't happen (not
+   * registered, no config, spawn failure) so callers fall back to the
+   * in-process attempt.
+   */
+  private tryDetachedEnd(): boolean {
+    const id = this.sessionId;
+    if (!id || !this.exitFlush) return false;
+    try {
+      const spawner =
+        this.exitFlush.spawner ?? (spawn as unknown as DetachedSpawner);
+      const base = this.exitFlush.baseUrl.replace(/\/$/, "");
+      const child = spawner(process.execPath, ["-e", EXIT_FLUSH_HELPER_CODE], {
+        detached: true,
+        stdio: "ignore",
+        // Credentials travel through the child's env, never argv — argv is
+        // visible to every user in `ps`.
+        env: {
+          CF_SESSION_END_URL: `${base}/functions/v1/sessions/${id}`,
+          CF_SESSION_END_KEY: this.exitFlush.apiKey,
+        },
+      });
+      child.unref?.();
+    } catch {
+      return false;
+    }
+    this.ended = true;
+    if (this.timer) {
+      clearInterval(this.timer);
+      this.timer = null;
+    }
+    this.sessionId = null;
+    return true;
+  }
+
   /** Best-effort end when the Claude Code session goes away. */
   installExitHooks(): void {
     const onSignal = () => {
+      // Claude Code escalates SIGINT → SIGTERM → SIGKILL within about a
+      // second; an in-process DELETE reliably loses that race against a
+      // remote API, so hand the goodbye to a detached helper and get out.
+      if (this.tryDetachedEnd()) {
+        process.exit(0);
+        return;
+      }
       // Registering a signal handler suppresses Node's default terminate
       // action, so after the best-effort end we must exit ourselves —
       // bounded by a short timeout so a hung DELETE can't block shutdown.
@@ -109,7 +174,7 @@ export class SessionPresence {
     process.once("SIGINT", onSignal);
     process.once("SIGTERM", onSignal);
     process.stdin.on("close", () => {
-      void this.end();
+      if (!this.tryDetachedEnd()) void this.end();
     });
   }
 }

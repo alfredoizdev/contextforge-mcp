@@ -26,9 +26,9 @@ describe('session presence wiring (static)', () => {
     expect(indexSrc.includes('presence.installExitHooks()')).toBe(true);
   });
 
-  it('bumps 0.3.0 everywhere (package.json + both server.json fields)', () => {
-    expect(pkg.version).toBe('0.3.0');
-    expect(serverJson.version).toBe('0.3.0');
-    expect(serverJson.packages[0].version).toBe('0.3.0');
+  it('bumps 0.3.1 everywhere (package.json + both server.json fields)', () => {
+    expect(pkg.version).toBe('0.3.1');
+    expect(serverJson.version).toBe('0.3.1');
+    expect(serverJson.packages[0].version).toBe('0.3.1');
   });
 });

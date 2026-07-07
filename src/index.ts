@@ -1737,10 +1737,16 @@ async function main() {
   // Registration is lazy (first tool call); heartbeat + exit hooks are
   // automatic. All of it is best-effort — never blocks a tool.
   const linkedProject = readProjectLinkConfig();
-  const presence = new SessionPresence(apiClient, {
-    projectId: linkedProject?.project_id,
-    label: basename(process.cwd()),
-  });
+  const presence = new SessionPresence(
+    apiClient,
+    {
+      projectId: linkedProject?.project_id,
+      label: basename(process.cwd()),
+    },
+    // Exit flush runs in a detached helper so the goodbye survives Claude
+    // Code killing this process on shutdown.
+    { baseUrl: config.apiUrl, apiKey: config.apiKey },
+  );
   presence.installExitHooks();
 
   // Startup banner
