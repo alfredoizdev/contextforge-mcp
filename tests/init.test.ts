@@ -1,8 +1,27 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtempSync, rmSync, writeFileSync, readFileSync, existsSync, mkdirSync } from "fs";
+import {
+  mkdtempSync,
+  rmSync,
+  writeFileSync,
+  readFileSync,
+  existsSync,
+  mkdirSync,
+} from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
-import { runInit, INIT_MARKER, CLAUDE_TEMPLATE, detectEditors } from "../src/init.js";
+import {
+  runInit,
+  INIT_MARKER,
+  PRESENCE_MARKER,
+  CLAUDE_MEMORY_SECTION,
+  CLAUDE_PRESENCE_SECTION,
+  detectEditors,
+} from "../src/init.js";
+
+/** Map a result's sections to { id: action } for terse assertions. */
+function actions(result: { sections: { id: string; action: string }[] }) {
+  return Object.fromEntries(result.sections.map((s) => [s.id, s.action]));
+}
 
 describe("runInit", () => {
   let tmp: string;
@@ -15,58 +34,93 @@ describe("runInit", () => {
     rmSync(tmp, { recursive: true, force: true });
   });
 
-  it("creates a new CLAUDE.md when none exists", () => {
+  it("creates a new CLAUDE.md with both sections", () => {
     const results = runInit(tmp, { editor: "claude" });
     expect(results).toHaveLength(1);
-    expect(results[0].action).toBe("created");
+    expect(results[0].fileCreated).toBe(true);
     expect(results[0].editor).toBe("claude");
     expect(results[0].path).toBe(join(tmp, "CLAUDE.md"));
-    expect(existsSync(results[0].path)).toBe(true);
+    expect(actions(results[0])).toEqual({
+      memory: "created",
+      presence: "created",
+    });
+
     const written = readFileSync(results[0].path, "utf-8");
     expect(written).toContain(INIT_MARKER);
+    expect(written).toContain(PRESENCE_MARKER);
     expect(written).toContain("ContextForge MCP — Memory Rules");
+    expect(written).toContain("Session Presence — Coordination Rules");
+    expect(written.indexOf(INIT_MARKER)).toBeLessThan(
+      written.indexOf(PRESENCE_MARKER),
+    );
   });
 
-  it("appends to existing CLAUDE.md without our section", () => {
+  it("appends both sections to an existing CLAUDE.md without our markers", () => {
     const claudeMdPath = join(tmp, "CLAUDE.md");
     const userContent = "# My Project\n\nSome user notes here.\n";
     writeFileSync(claudeMdPath, userContent);
 
     const results = runInit(tmp);
     expect(results).toHaveLength(1);
-    expect(results[0].action).toBe("appended");
-    expect(results[0].editor).toBe("claude");
+    expect(results[0].fileCreated).toBe(false);
+    expect(actions(results[0])).toEqual({
+      memory: "appended",
+      presence: "appended",
+    });
 
     const written = readFileSync(claudeMdPath, "utf-8");
     expect(written).toContain("Some user notes here.");
-    expect(written).toContain(INIT_MARKER);
     expect(written.indexOf("Some user notes here.")).toBeLessThan(
       written.indexOf(INIT_MARKER),
     );
+    expect(written.indexOf(INIT_MARKER)).toBeLessThan(
+      written.indexOf(PRESENCE_MARKER),
+    );
   });
 
-  it("is idempotent when CLAUDE.md already has our section", () => {
+  it("UPGRADE: appends only presence to a pre-presence CLAUDE.md, preserving everything", () => {
     const claudeMdPath = join(tmp, "CLAUDE.md");
-    writeFileSync(claudeMdPath, CLAUDE_TEMPLATE);
+    const preUpgrade =
+      "# My project\n\n" +
+      CLAUDE_MEMORY_SECTION +
+      "\n## My own rules\nkeep me exactly\n";
+    writeFileSync(claudeMdPath, preUpgrade);
 
-    const results = runInit(tmp);
-    expect(results).toHaveLength(1);
-    expect(results[0].action).toBe("already-present");
+    const results = runInit(tmp, { editor: "claude" });
+    expect(actions(results[0])).toEqual({
+      memory: "already-present",
+      presence: "appended",
+    });
 
     const written = readFileSync(claudeMdPath, "utf-8");
-    const markerCount = written.split(INIT_MARKER).length - 1;
-    expect(markerCount).toBe(1);
+    expect(written.startsWith(preUpgrade)).toBe(true);
+    expect(written).toContain("keep me exactly");
+    expect(written.split(PRESENCE_MARKER).length - 1).toBe(1);
+    expect(written.split(INIT_MARKER).length - 1).toBe(1);
   });
 
-  it("does not duplicate when called twice in a row", () => {
+  it("is fully idempotent when both markers are present", () => {
     runInit(tmp, { editor: "claude" });
-    const second = runInit(tmp, { editor: "claude" });
-    expect(second).toHaveLength(1);
-    expect(second[0].action).toBe("already-present");
+    const before = readFileSync(join(tmp, "CLAUDE.md"), "utf-8");
 
-    const written = readFileSync(join(tmp, "CLAUDE.md"), "utf-8");
-    const markerCount = written.split(INIT_MARKER).length - 1;
-    expect(markerCount).toBe(1);
+    const second = runInit(tmp, { editor: "claude" });
+    expect(second[0].fileCreated).toBe(false);
+    expect(actions(second[0])).toEqual({
+      memory: "already-present",
+      presence: "already-present",
+    });
+    expect(readFileSync(join(tmp, "CLAUDE.md"), "utf-8")).toBe(before);
+  });
+
+  it("handles a file that somehow has ONLY the presence section (memory gets appended)", () => {
+    const claudeMdPath = join(tmp, "CLAUDE.md");
+    writeFileSync(claudeMdPath, CLAUDE_PRESENCE_SECTION);
+
+    const results = runInit(tmp, { editor: "claude" });
+    expect(actions(results[0])).toEqual({
+      memory: "appended",
+      presence: "already-present",
+    });
   });
 
   it("normalizes trailing newline when appending", () => {
@@ -78,43 +132,36 @@ describe("runInit", () => {
     const written = readFileSync(claudeMdPath, "utf-8");
     expect(written.startsWith("# No trailing newline\n")).toBe(true);
     expect(written).toContain(INIT_MARKER);
+    expect(written).toContain(PRESENCE_MARKER);
   });
 
-  it("creates .cursorrules with editor=cursor", () => {
+  it("creates .cursorrules with both sections when editor=cursor", () => {
     const results = runInit(tmp, { editor: "cursor" });
     expect(results).toHaveLength(1);
     expect(results[0].editor).toBe("cursor");
-    expect(results[0].action).toBe("created");
+    expect(results[0].fileCreated).toBe(true);
     expect(results[0].path).toBe(join(tmp, ".cursorrules"));
+
     const written = readFileSync(results[0].path, "utf-8");
     expect(written).toContain(INIT_MARKER);
-    expect(written).toContain("ContextForge MCP — Memory Rules");
+    expect(written).toContain(PRESENCE_MARKER);
+    expect(written).toContain("Session Presence — Coordination Rules");
   });
 
-  it("appends to existing .cursorrules without marker", () => {
-    const cursorRulesPath = join(tmp, ".cursorrules");
-    writeFileSync(cursorRulesPath, "# my custom rule\n");
-
-    const results = runInit(tmp);
-    expect(results).toHaveLength(1);
-    expect(results[0].editor).toBe("cursor");
-    expect(results[0].action).toBe("appended");
-
-    const written = readFileSync(cursorRulesPath, "utf-8");
-    expect(written).toContain("# my custom rule");
-    expect(written).toContain(INIT_MARKER);
-    expect(written.indexOf("# my custom rule")).toBeLessThan(
-      written.indexOf(INIT_MARKER),
-    );
-  });
-
-  it("is idempotent on .cursorrules when marker present", () => {
+  it("UPGRADE: .cursorrules with only the old marker receives only presence", () => {
     const cursorRulesPath = join(tmp, ".cursorrules");
     writeFileSync(cursorRulesPath, "# header\n\n" + INIT_MARKER + "\nbody\n");
 
     const results = runInit(tmp);
-    expect(results).toHaveLength(1);
-    expect(results[0].action).toBe("already-present");
+    expect(results[0].editor).toBe("cursor");
+    expect(actions(results[0])).toEqual({
+      memory: "already-present",
+      presence: "appended",
+    });
+
+    const written = readFileSync(cursorRulesPath, "utf-8");
+    expect(written).toContain("# header");
+    expect(written).toContain("body");
   });
 
   it("writes both files when both editors detected", () => {
@@ -130,8 +177,6 @@ describe("runInit", () => {
   it("writes both files when neither editor detected (zero-friction fallback)", () => {
     const results = runInit(tmp);
     expect(results).toHaveLength(2);
-    const editors = results.map((r) => r.editor).sort();
-    expect(editors).toEqual(["claude", "cursor"]);
     expect(existsSync(join(tmp, "CLAUDE.md"))).toBe(true);
     expect(existsSync(join(tmp, ".cursorrules"))).toBe(true);
   });

@@ -109,7 +109,12 @@ Set up your project so your AI editor knows to use ContextForge memory:
 npx contextforge-mcp init
 ```
 
-By default, `init` auto-detects which editor your project uses and writes:
+By default, `init` auto-detects which editor your project uses and writes two rule sections:
+
+- **Memory rules** — route memory questions to ContextForge instead of the built-in file memory
+- **Session Presence rules** — make parallel sessions check for each other at conversation start and before big changes
+
+Files written:
 
 - `CLAUDE.md` for Claude Code (signals: existing `CLAUDE.md` or `.claude/` directory)
 - `.cursorrules` for Cursor (signals: existing `.cursorrules` or `.cursor/` directory)
@@ -126,7 +131,7 @@ If no editor is detected, both files are generated.
 | `--editor=cursor` | Generate only `.cursorrules` |
 | `--editor=all` | Generate both, skip detection |
 
-Re-running `init` is idempotent — files that already contain our marker are left untouched.
+Re-running `init` is idempotent **per section** — sections you already have are left untouched; missing ones are appended. Upgrading from an older version? Just re-run `npx contextforge-mcp init`: it adds the new Session Presence section without touching the rest of your file.
 
 ---
 

@@ -4,8 +4,11 @@ import { join } from "path";
 /** Hidden sentinel — used to detect if we have already written our section. */
 export const INIT_MARKER = "<!-- contextforge-mcp:init -->";
 
+/** Hidden sentinel for the Session Presence section. */
+export const PRESENCE_MARKER = "<!-- contextforge-mcp:presence -->";
+
 /** CLAUDE.md content appended (or written fresh) by `contextforge-mcp init`. */
-export const CLAUDE_TEMPLATE = `${INIT_MARKER}
+export const CLAUDE_MEMORY_SECTION = `${INIT_MARKER}
 
 ## ContextForge MCP — Memory Rules
 
@@ -50,7 +53,7 @@ This rule is non-negotiable.
 `;
 
 /** .cursorrules content appended (or written fresh) by `contextforge-mcp init`. */
-export const CURSOR_TEMPLATE = `${INIT_MARKER}
+export const CURSOR_MEMORY_SECTION = `${INIT_MARKER}
 
 # ContextForge MCP — Memory Rules
 
@@ -82,8 +85,72 @@ When the user asks ANYTHING about memory, decisions, project context, tasks, pas
 This rule is non-negotiable.
 `;
 
+/** Session Presence section appended to CLAUDE.md. */
+export const CLAUDE_PRESENCE_SECTION = `${PRESENCE_MARKER}
+
+## Session Presence — Coordination Rules
+
+Multiple AI coding sessions (Claude Code, Cursor, Copilot) may work on this project in parallel. This project uses ContextForge **Session Presence** so sessions can see each other in real time. Presence is **advisory** — a busy sign on a door, not a lock.
+
+### Rules — apply in this exact order
+
+1. **At the START of every conversation:** call \`mcp__contextforge__session_list\` to see who else is working on this project right now. If other live sessions exist, tell the user who is here and what each one is focused on BEFORE starting any work.
+2. **BEFORE any large or multi-file change:** call \`mcp__contextforge__session_list\` again. If another session's focus overlaps the area you are about to touch, WARN the user and let them decide how to proceed.
+3. **When you START or SWITCH tasks:** call \`mcp__contextforge__session_update\` with a one-line focus (e.g. "Working on the payments flow") so every other session can see it.
+
+### What NOT to do
+
+- ❌ Start multi-file work without checking \`session_list\` first
+- ❌ Silently proceed into an area another session has declared as its focus
+- ❌ Refuse or block work because another session is present — presence is advisory; the human decides
+- ❌ Leave your focus empty while doing significant work
+`;
+
+/** Session Presence section appended to .cursorrules. */
+export const CURSOR_PRESENCE_SECTION = `${PRESENCE_MARKER}
+
+# Session Presence — Coordination Rules
+
+Multiple AI coding sessions (Claude Code, Cursor, Copilot) may work on this project in parallel. This project uses ContextForge **Session Presence** so sessions can see each other in real time. Presence is **advisory** — a busy sign on a door, not a lock.
+
+## Rules — apply in this exact order
+
+1. **At the START of every conversation:** call \`mcp__contextforge__session_list\` to see who else is working on this project right now. If other live sessions exist, tell the user who is here and what each one is focused on BEFORE starting any work.
+2. **BEFORE any large or multi-file change:** call \`mcp__contextforge__session_list\` again. If another session's focus overlaps the area you are about to touch, WARN the user and let them decide how to proceed.
+3. **When you START or SWITCH tasks:** call \`mcp__contextforge__session_update\` with a one-line focus (e.g. "Working on the payments flow") so every other session can see it.
+
+## What NOT to do
+
+- ❌ Start multi-file work without checking \`session_list\` first
+- ❌ Silently proceed into an area another session has declared as its focus
+- ❌ Refuse or block work because another session is present — presence is advisory; the human decides
+- ❌ Leave your focus empty while doing significant work
+`;
+
 /** Editors that `init` can generate rules for. */
 export type Editor = "claude" | "cursor";
+
+export type InitAction = "created" | "appended" | "already-present";
+
+export interface TemplateSection {
+  id: string;
+  title: string;
+  marker: string;
+  content: string;
+}
+
+export interface SectionResult {
+  id: string;
+  title: string;
+  action: InitAction;
+}
+
+export interface InitResult {
+  editor: Editor;
+  path: string;
+  fileCreated: boolean;
+  sections: SectionResult[];
+}
 
 /**
  * Detect which editors a project uses by checking for filesystem signals
@@ -94,10 +161,7 @@ export type Editor = "claude" | "cursor";
  */
 export function detectEditors(cwd: string): Editor[] {
   const detected: Editor[] = [];
-  if (
-    existsSync(join(cwd, "CLAUDE.md")) ||
-    existsSync(join(cwd, ".claude"))
-  ) {
+  if (existsSync(join(cwd, "CLAUDE.md")) || existsSync(join(cwd, ".claude"))) {
     detected.push("claude");
   }
   if (
@@ -109,14 +173,6 @@ export function detectEditors(cwd: string): Editor[] {
   return detected;
 }
 
-export type InitAction = "created" | "appended" | "already-present";
-
-export interface InitResult {
-  editor: Editor;
-  action: InitAction;
-  path: string;
-}
-
 export interface InitOptions {
   /**
    * Force a specific editor or all of them. When undefined, the editors
@@ -126,9 +182,44 @@ export interface InitOptions {
   editor?: Editor | "all";
 }
 
-const EDITOR_FILES: Record<Editor, { fileName: string; template: string }> = {
-  claude: { fileName: "CLAUDE.md", template: CLAUDE_TEMPLATE },
-  cursor: { fileName: ".cursorrules", template: CURSOR_TEMPLATE },
+const EDITOR_FILES: Record<
+  Editor,
+  { fileName: string; sections: TemplateSection[] }
+> = {
+  claude: {
+    fileName: "CLAUDE.md",
+    sections: [
+      {
+        id: "memory",
+        title: "Memory rules",
+        marker: INIT_MARKER,
+        content: CLAUDE_MEMORY_SECTION,
+      },
+      {
+        id: "presence",
+        title: "Session Presence rules",
+        marker: PRESENCE_MARKER,
+        content: CLAUDE_PRESENCE_SECTION,
+      },
+    ],
+  },
+  cursor: {
+    fileName: ".cursorrules",
+    sections: [
+      {
+        id: "memory",
+        title: "Memory rules",
+        marker: INIT_MARKER,
+        content: CURSOR_MEMORY_SECTION,
+      },
+      {
+        id: "presence",
+        title: "Session Presence rules",
+        marker: PRESENCE_MARKER,
+        content: CURSOR_PRESENCE_SECTION,
+      },
+    ],
+  },
 };
 
 function resolveEditors(cwd: string, options?: InitOptions): Editor[] {
@@ -141,41 +232,57 @@ function resolveEditors(cwd: string, options?: InitOptions): Editor[] {
 }
 
 function applyTemplate(cwd: string, editor: Editor): InitResult {
-  const { fileName, template } = EDITOR_FILES[editor];
+  const { fileName, sections } = EDITOR_FILES[editor];
   const filePath = join(cwd, fileName);
 
   if (!existsSync(filePath)) {
-    writeFileSync(filePath, template);
-    return { editor, action: "created", path: filePath };
+    writeFileSync(filePath, sections.map((s) => s.content).join("\n"));
+    return {
+      editor,
+      path: filePath,
+      fileCreated: true,
+      sections: sections.map((s) => ({
+        id: s.id,
+        title: s.title,
+        action: "created" as const,
+      })),
+    };
   }
 
-  const existing = readFileSync(filePath, "utf-8");
-  if (existing.includes(INIT_MARKER)) {
-    return { editor, action: "already-present", path: filePath };
+  let current = readFileSync(filePath, "utf-8");
+  const results: SectionResult[] = [];
+  let dirty = false;
+
+  for (const section of sections) {
+    if (current.includes(section.marker)) {
+      results.push({
+        id: section.id,
+        title: section.title,
+        action: "already-present",
+      });
+      continue;
+    }
+    const trimmed = current.endsWith("\n") ? current : current + "\n";
+    current = trimmed + "\n" + section.content;
+    dirty = true;
+    results.push({ id: section.id, title: section.title, action: "appended" });
   }
 
-  const trimmed = existing.endsWith("\n") ? existing : existing + "\n";
-  const combined = trimmed + "\n" + template;
-  writeFileSync(filePath, combined);
-  return { editor, action: "appended", path: filePath };
+  if (dirty) writeFileSync(filePath, current);
+  return { editor, path: filePath, fileCreated: false, sections: results };
 }
 
 /**
- * Pure-logic init: writes or appends the appropriate template to each
- * detected (or explicitly requested) editor's rules file in the given cwd.
- * Idempotent via INIT_MARKER sentinel.
- *
- * @returns one InitResult per editor processed.
+ * Pure-logic init: for each detected (or requested) editor, appends every
+ * template section whose marker is missing. Idempotent per section; never
+ * modifies existing content.
  */
 export function runInit(cwd: string, options?: InitOptions): InitResult[] {
   const editors = resolveEditors(cwd, options);
   return editors.map((editor) => applyTemplate(cwd, editor));
 }
 
-/**
- * CLI wrapper — prints a friendly message per file and returns the results.
- * Caller is responsible for process.exit().
- */
+/** CLI wrapper — one line per file, one line per section. */
 export function runInitCLI(cwd: string, options?: InitOptions): InitResult[] {
   const results = runInit(cwd, options);
   const reset = "\x1b[0m";
@@ -183,31 +290,32 @@ export function runInitCLI(cwd: string, options?: InitOptions): InitResult[] {
   const yellow = "\x1b[33m";
   const dim = "\x1b[2m";
 
+  let anyChange = false;
   for (const result of results) {
     const editorName = result.editor === "claude" ? "Claude Code" : "Cursor";
-    switch (result.action) {
-      case "created":
+    const changed =
+      result.fileCreated ||
+      result.sections.some((s) => s.action === "appended");
+    anyChange = anyChange || changed;
+    const header = result.fileCreated
+      ? `${green}✓ Created${reset}`
+      : changed
+        ? `${green}✓ Updated${reset}`
+        : `${yellow}• Unchanged${reset}`;
+    console.log(`${header} ${result.path} ${dim}(${editorName})${reset}`);
+    for (const s of result.sections) {
+      if (s.action === "already-present") {
         console.log(
-          `${green}✓ Created${reset} ${result.path}\n` +
-            `  ${editorName} will now use ContextForge MCP for memory in this directory.\n`,
+          `  ${yellow}•${reset} ${s.title}: already present ${dim}(unchanged)${reset}`,
         );
-        break;
-      case "appended":
-        console.log(
-          `${green}✓ Appended ContextForge section to${reset} ${result.path}\n` +
-            `  Your existing file was preserved; our memory rules were added.\n`,
-        );
-        break;
-      case "already-present":
-        console.log(
-          `${yellow}ContextForge section is already present in${reset} ${result.path}\n` +
-            `  ${dim}No changes made.${reset}\n`,
-        );
-        break;
+      } else {
+        console.log(`  ${green}✓${reset} ${s.title}: ${s.action}`);
+      }
     }
+    console.log("");
   }
 
-  if (results.length > 1) {
+  if (anyChange) {
     console.log(
       `${dim}Restart your editor(s) in this directory to pick up changes.${reset}`,
     );
