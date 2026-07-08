@@ -1,0 +1,45 @@
+{
+  "manifest_version": "0.3",
+  "name": "contextforge-mcp",
+  "display_name": "ContextForge Memory",
+  "version": "__VERSION__",
+  "description": "Persistent memory MCP server for Claude Code, Cursor, and GitHub Copilot. Give your AI assistants long-term memory via the Model Context Protocol.",
+  "author": {
+    "name": "Alfredo Izquierdo",
+    "url": "https://contextforge.dev"
+  },
+  "homepage": "https://contextforge.dev",
+  "documentation": "https://contextforge.dev/docs",
+  "icon": "icon.png",
+  "server": {
+    "type": "node",
+    "entry_point": "dist/index.js",
+    "mcp_config": {
+      "command": "node",
+      "args": ["${__dirname}/dist/index.js"],
+      "env": {
+        "CONTEXTFORGE_API_KEY": "${user_config.api_key}",
+        "CONTEXTFORGE_DISABLE_INIT_HINT": "1"
+      }
+    }
+  },
+  "user_config": {
+    "api_key": {
+      "type": "string",
+      "title": "ContextForge API Key",
+      "description": "Get yours free at https://contextforge.dev/dashboard/api-keys",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "tools": "__TOOLS__",
+  "privacy_policies": ["https://contextforge.dev/privacy"],
+  "compatibility": {
+    "platforms": ["darwin", "win32", "linux"],
+    "runtimes": {
+      "node": ">=20.0.0"
+    }
+  },
+  "keywords": ["memory", "knowledge-base", "tasks", "session-presence", "mcp"],
+  "license": "MIT"
+}
