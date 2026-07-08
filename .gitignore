@@ -38,3 +38,7 @@ Thumbs.db
 
 # Internal workflow docs (superpowers skill artifacts)
 docs/superpowers/
+
+# MCPB bundle build artifacts
+mcpb-build/
+*.mcpb
