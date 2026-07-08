@@ -51,13 +51,18 @@ import {
   parseArrayInput,
 } from "./types.js";
 import type { Config } from "./types.js";
-import { resolveTaskId, resolveTaskTitle, resolveTaskIdentifier } from "./task-params.js";
+import {
+  resolveTaskId,
+  resolveTaskTitle,
+  resolveTaskIdentifier,
+} from "./task-params.js";
 
 import { appendFileSync } from "fs";
 import { createRequire } from "module";
 import { basename } from "path";
 import { checkForUpdates, getUpdateNotice } from "./update-checker.js";
 import { runInitCLI } from "./init.js";
+import { checkInitHint, consumeInitHint } from "./init-hint.js";
 import { SessionPresence } from "./session-presence.js";
 
 const require = createRequire(import.meta.url);
@@ -71,7 +76,9 @@ if (process.argv[2] === "init") {
     .slice(3)
     .find((a) => a.startsWith("--editor="));
 
-  const editorValue = editorArg ? editorArg.slice("--editor=".length) : undefined;
+  const editorValue = editorArg
+    ? editorArg.slice("--editor=".length)
+    : undefined;
 
   if (
     editorValue !== undefined &&
@@ -87,7 +94,9 @@ if (process.argv[2] === "init") {
 
   runInitCLI(
     process.cwd(),
-    editorValue ? { editor: editorValue as "claude" | "cursor" | "all" } : undefined,
+    editorValue
+      ? { editor: editorValue as "claude" | "cursor" | "all" }
+      : undefined,
   );
   process.exit(0);
 }
@@ -297,7 +306,13 @@ const TOOLS = [
     name: "memory_ingest",
     description:
       "**Save important context to persistent memory — be proactive.** Call this WHENEVER you learn information that would be valuable in a future conversation: project decisions ('we chose Postgres because X'), architectural choices, user preferences, debugging insights, recurring patterns, deadlines, stakeholder context, or any 'remember this' / 'save this' / 'note that' style request from the user. Heuristic: if you would be sad to lose this fact when the conversation ends, ingest it. Better to over-save than to under-save — the memory_query semantic search will surface what's relevant later. Always pass meaningful `title` and `tags` so the item is discoverable.",
-    annotations: { title: "Save to Memory", readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+    annotations: {
+      title: "Save to Memory",
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+      openWorldHint: false,
+    },
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -339,7 +354,13 @@ const TOOLS = [
     name: "memory_query",
     description:
       "**Search persistent memory BEFORE answering any project-specific question.** You MUST call this tool: (a) at the start of any conversation that touches the user's codebase, work, or decisions, BEFORE generating any response; (b) whenever the user references prior context ('did we', 'we decided', 'remember', 'what did I save', 'last time'); (c) before making architectural or design recommendations — the user's prior decisions live here. Returns semantically relevant stored content. Skipping this when relevant context exists makes you appear to have amnesia and is the #1 reason users abandon persistent memory — always check first, even if you think you remember.",
-    annotations: { title: "Search Memory", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    annotations: {
+      title: "Search Memory",
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -396,7 +417,13 @@ const TOOLS = [
     name: "memory_get_item",
     description:
       "Get the full content of a knowledge item by its ID. Use this when memory_query returns truncated previews and you need the complete content.",
-    annotations: { title: "Get Memory Item", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    annotations: {
+      title: "Get Memory Item",
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -413,7 +440,13 @@ const TOOLS = [
     name: "memory_list_projects",
     description:
       "List all projects. Projects contain multiple spaces for organizing knowledge by project.",
-    annotations: { title: "List Projects", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    annotations: {
+      title: "List Projects",
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
     inputSchema: {
       type: "object" as const,
       properties: {},
@@ -423,7 +456,13 @@ const TOOLS = [
   {
     name: "memory_create_project",
     description: "Create a new project to organize related spaces",
-    annotations: { title: "Create Project", readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+    annotations: {
+      title: "Create Project",
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+      openWorldHint: false,
+    },
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -444,7 +483,13 @@ const TOOLS = [
     name: "memory_list_spaces",
     description:
       'List knowledge spaces (workspaces). By default shows only knowledge spaces. Use space_type "git" for GitHub repos, or "all" to see everything.',
-    annotations: { title: "List Spaces", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    annotations: {
+      title: "List Spaces",
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -470,7 +515,13 @@ const TOOLS = [
     name: "memory_create_space",
     description:
       "Create a new memory space (workspace) for organizing knowledge",
-    annotations: { title: "Create Space", readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+    annotations: {
+      title: "Create Space",
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+      openWorldHint: false,
+    },
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -497,7 +548,13 @@ const TOOLS = [
   {
     name: "memory_move_space",
     description: "Move a space to a different project",
-    annotations: { title: "Move Space", readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    annotations: {
+      title: "Move Space",
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -517,7 +574,13 @@ const TOOLS = [
     name: "memory_delete_space",
     description:
       "Delete a space and all its items permanently. This action cannot be undone.",
-    annotations: { title: "Delete Space", readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
+    annotations: {
+      title: "Delete Space",
+      readOnlyHint: false,
+      destructiveHint: true,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -533,7 +596,13 @@ const TOOLS = [
     name: "memory_delete_project",
     description:
       "Delete a project and all its spaces permanently. This will delete all spaces and their items within the project. This action cannot be undone.",
-    annotations: { title: "Delete Project", readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
+    annotations: {
+      title: "Delete Project",
+      readOnlyHint: false,
+      destructiveHint: true,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -548,7 +617,13 @@ const TOOLS = [
   {
     name: "memory_relate",
     description: "Create a relationship between two knowledge items",
-    annotations: { title: "Relate Memory Items", readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+    annotations: {
+      title: "Relate Memory Items",
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+      openWorldHint: false,
+    },
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -593,7 +668,13 @@ const TOOLS = [
     name: "memory_list_relationships",
     description:
       "List all relationships for a knowledge item, showing both incoming and outgoing connections with related item details",
-    annotations: { title: "List Relationships", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    annotations: {
+      title: "List Relationships",
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -608,7 +689,13 @@ const TOOLS = [
   {
     name: "memory_delete",
     description: "Delete a knowledge item from memory by ID or title",
-    annotations: { title: "Delete Memory Item", readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
+    annotations: {
+      title: "Delete Memory Item",
+      readOnlyHint: false,
+      destructiveHint: true,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -636,7 +723,13 @@ const TOOLS = [
   {
     name: "memory_stats",
     description: "Get statistics about memory usage",
-    annotations: { title: "Memory Stats", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    annotations: {
+      title: "Memory Stats",
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -652,7 +745,13 @@ const TOOLS = [
     name: "memory_list_items",
     description:
       "List all items stored in memory. Shows titles, previews, tags, and creation dates.",
-    annotations: { title: "List Memory Items", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    annotations: {
+      title: "List Memory Items",
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -677,7 +776,13 @@ const TOOLS = [
     name: "memory_help",
     description:
       "Show help and usage instructions for ContextForge memory commands",
-    annotations: { title: "Memory Help", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    annotations: {
+      title: "Memory Help",
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
     inputSchema: {
       type: "object" as const,
       properties: {},
@@ -689,7 +794,13 @@ const TOOLS = [
     name: "memory_git_connect",
     description:
       "Connect a GitHub repository to automatically sync commits and PRs to memory",
-    annotations: { title: "Connect GitHub Repo", readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+    annotations: {
+      title: "Connect GitHub Repo",
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: true,
+    },
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -709,7 +820,13 @@ const TOOLS = [
   {
     name: "memory_git_list",
     description: "List all connected GitHub repositories",
-    annotations: { title: "List GitHub Repos", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    annotations: {
+      title: "List GitHub Repos",
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -725,7 +842,13 @@ const TOOLS = [
     name: "memory_git_activate",
     description:
       "Activate or deactivate a connected repository webhook after setup",
-    annotations: { title: "Activate GitHub Repo", readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    annotations: {
+      title: "Activate GitHub Repo",
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -750,7 +873,13 @@ const TOOLS = [
   {
     name: "memory_git_disconnect",
     description: "Disconnect a GitHub repository and stop syncing",
-    annotations: { title: "Disconnect GitHub Repo", readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    annotations: {
+      title: "Disconnect GitHub Repo",
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -771,7 +900,13 @@ const TOOLS = [
     name: "memory_git_sync",
     description:
       "Sync existing commits and PRs from a connected GitHub repository into memory",
-    annotations: { title: "Sync GitHub Repo", readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+    annotations: {
+      title: "Sync GitHub Repo",
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: true,
+    },
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -800,7 +935,13 @@ const TOOLS = [
   {
     name: "memory_git_commits",
     description: "List commits stored in memory from connected repositories",
-    annotations: { title: "List Git Commits", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    annotations: {
+      title: "List Git Commits",
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -834,7 +975,13 @@ const TOOLS = [
     name: "memory_git_prs",
     description:
       "List pull requests stored in memory from connected repositories",
-    annotations: { title: "List Pull Requests", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    annotations: {
+      title: "List Pull Requests",
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -867,7 +1014,13 @@ const TOOLS = [
   {
     name: "memory_snapshot_create",
     description: "Create a snapshot (backup) of the current memory state",
-    annotations: { title: "Create Snapshot", readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+    annotations: {
+      title: "Create Snapshot",
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+      openWorldHint: false,
+    },
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -890,7 +1043,13 @@ const TOOLS = [
   {
     name: "memory_snapshot_list",
     description: "List all available snapshots",
-    annotations: { title: "List Snapshots", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    annotations: {
+      title: "List Snapshots",
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -905,7 +1064,13 @@ const TOOLS = [
   {
     name: "memory_snapshot_restore",
     description: "Restore memory to a previous snapshot state",
-    annotations: { title: "Restore Snapshot", readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
+    annotations: {
+      title: "Restore Snapshot",
+      readOnlyHint: false,
+      destructiveHint: true,
+      idempotentHint: false,
+      openWorldHint: false,
+    },
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -926,7 +1091,13 @@ const TOOLS = [
   {
     name: "memory_snapshot_delete",
     description: "Delete a snapshot",
-    annotations: { title: "Delete Snapshot", readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
+    annotations: {
+      title: "Delete Snapshot",
+      readOnlyHint: false,
+      destructiveHint: true,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -943,7 +1114,13 @@ const TOOLS = [
     name: "memory_export",
     description:
       "Export all items from a space to JSON, Markdown, or CSV format",
-    annotations: { title: "Export Memory", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    annotations: {
+      title: "Export Memory",
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -964,7 +1141,13 @@ const TOOLS = [
     name: "memory_import",
     description:
       "Import items from JSON, Markdown, Notion, or Obsidian format into a space",
-    annotations: { title: "Import Memory", readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+    annotations: {
+      title: "Import Memory",
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+      openWorldHint: false,
+    },
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -1004,7 +1187,13 @@ const TOOLS = [
     name: "memory_ingest_batch",
     description:
       "Add multiple items to memory in a single operation. More efficient than multiple single ingests.",
-    annotations: { title: "Batch Save to Memory", readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+    annotations: {
+      title: "Batch Save to Memory",
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+      openWorldHint: false,
+    },
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -1044,7 +1233,13 @@ const TOOLS = [
     name: "memory_delete_batch",
     description:
       "Delete multiple items from memory based on filters. Use dry_run=true first to preview what will be deleted.",
-    annotations: { title: "Batch Delete Memory Items", readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
+    annotations: {
+      title: "Batch Delete Memory Items",
+      readOnlyHint: false,
+      destructiveHint: true,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -1103,7 +1298,13 @@ const TOOLS = [
     name: "memory_link_project",
     description:
       "Link the current directory to a ContextForge project. When linked, all queries will be automatically filtered to only search within that project's spaces. This creates a .contextforge file in the current directory.",
-    annotations: { title: "Link Project", readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    annotations: {
+      title: "Link Project",
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -1125,7 +1326,13 @@ const TOOLS = [
     name: "memory_unlink_project",
     description:
       "Remove the project link from the current directory. This deletes the .contextforge file and queries will no longer be filtered by project.",
-    annotations: { title: "Unlink Project", readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    annotations: {
+      title: "Unlink Project",
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
     inputSchema: {
       type: "object" as const,
       properties: {},
@@ -1136,7 +1343,13 @@ const TOOLS = [
     name: "memory_current_project",
     description:
       "**Check the linked project at the start of every new conversation in a directory.** Call this FIRST (alongside memory_query) before answering questions about the user's project, code, or work — it tells you which ContextForge project and spaces are scoped to the current working directory. If `linked: false`, surface that to the user and suggest `memory_link_project`. Pair this with memory_query as your two startup-context calls — they are the cheapest possible way to avoid hallucinating about the user's project.",
-    annotations: { title: "Current Linked Project", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    annotations: {
+      title: "Current Linked Project",
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
     inputSchema: {
       type: "object" as const,
       properties: {},
@@ -1148,7 +1361,13 @@ const TOOLS = [
     name: "tasks_list",
     description:
       '**Call this at the start of any conversation about work, planning, or status — and any time the user asks about pending/open/in-progress tasks.** Shows pending tasks by default (sort by due date, urgent first). Use status "all" for everything, "resolved" for completed, "in_progress" for active work. IMPORTANT: Every task includes a dashboard URL (🔗). You MUST include these clickable links when presenting tasks to the user. If you see overdue tasks (past due date), surface them at the top of your response.',
-    annotations: { title: "List Tasks", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    annotations: {
+      title: "List Tasks",
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -1179,13 +1398,20 @@ const TOOLS = [
     name: "tasks_start",
     description:
       'Mark a task as "in_progress". Use this when you start working on a task. Accepts any identifier: UUID, short_id, or task title. The response includes a dashboard URL — always show it to the user.',
-    annotations: { title: "Start Task", readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    annotations: {
+      title: "Start Task",
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
     inputSchema: {
       type: "object" as const,
       properties: {
         identifier: {
           type: "string",
-          description: "Task identifier — can be a UUID, short_id (e.g. 'hpiu09'), or task title/name",
+          description:
+            "Task identifier — can be a UUID, short_id (e.g. 'hpiu09'), or task title/name",
         },
       },
       required: ["identifier"],
@@ -1195,13 +1421,20 @@ const TOOLS = [
     name: "tasks_resolve",
     description:
       'Mark a task as "resolved". Use this when you finish working on a task. Accepts any identifier: UUID, short_id, or task title. The response includes a dashboard URL — always show it to the user.',
-    annotations: { title: "Resolve Task", readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    annotations: {
+      title: "Resolve Task",
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
     inputSchema: {
       type: "object" as const,
       properties: {
         identifier: {
           type: "string",
-          description: "Task identifier — can be a UUID, short_id (e.g. 'hpiu09'), or task title/name",
+          description:
+            "Task identifier — can be a UUID, short_id (e.g. 'hpiu09'), or task title/name",
         },
       },
       required: ["identifier"],
@@ -1211,7 +1444,13 @@ const TOOLS = [
     name: "tasks_what_next",
     description:
       "**Call this whenever the user asks what they should work on, what's next, what's pending, or how to start the day.** Trigger phrases include: 'what should I do', 'where do I start', 'qué hago hoy', 'next task', 'I have time, what's open'. Returns the highest-priority unresolved task assigned to the user, with due date and priority. Always include the dashboard URL (🔗) in your reply so the user can click through. Prefer this over generic answers when the user seems unsure about priorities — it gives a concrete next action.",
-    annotations: { title: "What Task is Next?", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    annotations: {
+      title: "What Task is Next?",
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
     inputSchema: {
       type: "object" as const,
       properties: {},
@@ -1223,7 +1462,13 @@ const TOOLS = [
     name: "tasks_create",
     description:
       "Create a new task in a project. Optionally assign it to a collaborator by their email. The response includes a dashboard URL — always show it to the user.",
-    annotations: { title: "Create Task", readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+    annotations: {
+      title: "Create Task",
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+      openWorldHint: false,
+    },
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -1275,13 +1520,20 @@ const TOOLS = [
     name: "tasks_update",
     description:
       "Update a task's title, description, status, priority, tags, due date, or assignee. Accepts any identifier: UUID, short_id, or task title. The response includes a dashboard URL — always show it to the user.",
-    annotations: { title: "Update Task", readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    annotations: {
+      title: "Update Task",
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
     inputSchema: {
       type: "object" as const,
       properties: {
         identifier: {
           type: "string",
-          description: "Task identifier — can be a UUID, short_id (e.g. 'hpiu09'), or task title/name",
+          description:
+            "Task identifier — can be a UUID, short_id (e.g. 'hpiu09'), or task title/name",
         },
         title: {
           type: "string",
@@ -1320,14 +1572,22 @@ const TOOLS = [
   },
   {
     name: "tasks_assign",
-    description: "Assign a task to a collaborator by their email address. Accepts any task identifier: UUID, short_id, or task title. The response includes a dashboard URL — always show it to the user.",
-    annotations: { title: "Assign Task", readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    description:
+      "Assign a task to a collaborator by their email address. Accepts any task identifier: UUID, short_id, or task title. The response includes a dashboard URL — always show it to the user.",
+    annotations: {
+      title: "Assign Task",
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
     inputSchema: {
       type: "object" as const,
       properties: {
         identifier: {
           type: "string",
-          description: "Task identifier — can be a UUID, short_id (e.g. 'hpiu09'), or task title/name",
+          description:
+            "Task identifier — can be a UUID, short_id (e.g. 'hpiu09'), or task title/name",
         },
         assignee_email: {
           type: "string",
@@ -1341,13 +1601,20 @@ const TOOLS = [
     name: "tasks_resolve_by_name",
     description:
       "Resolve a task by searching for it by title, short_id, or UUID. Use this when you have any identifier for the task. The response includes a dashboard URL — always show it to the user.",
-    annotations: { title: "Resolve Task by Name", readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    annotations: {
+      title: "Resolve Task by Name",
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
     inputSchema: {
       type: "object" as const,
       properties: {
         title: {
           type: "string",
-          description: "Task identifier — can be a title (partial match), short_id, or UUID",
+          description:
+            "Task identifier — can be a title (partial match), short_id, or UUID",
         },
       },
       required: ["title"],
@@ -1357,13 +1624,20 @@ const TOOLS = [
     name: "tasks_delete",
     description:
       "Permanently delete a task. Accepts any identifier: UUID, short_id, or task title. Also deletes related comments, activity, and notifications.",
-    annotations: { title: "Delete Task", readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
+    annotations: {
+      title: "Delete Task",
+      readOnlyHint: false,
+      destructiveHint: true,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
     inputSchema: {
       type: "object" as const,
       properties: {
         identifier: {
           type: "string",
-          description: "Task identifier — can be a UUID, short_id (e.g. 'hpiu09'), or task title/name",
+          description:
+            "Task identifier — can be a UUID, short_id (e.g. 'hpiu09'), or task title/name",
         },
       },
       required: ["identifier"],
@@ -1374,13 +1648,20 @@ const TOOLS = [
     name: "tasks_list_comments",
     description:
       "List comments on a task. Accepts any identifier: UUID, short_id, or task title.",
-    annotations: { title: "List Task Comments", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    annotations: {
+      title: "List Task Comments",
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
     inputSchema: {
       type: "object" as const,
       properties: {
         identifier: {
           type: "string",
-          description: "Task identifier — can be a UUID, short_id (e.g. 'hpiu09'), or task title/name",
+          description:
+            "Task identifier — can be a UUID, short_id (e.g. 'hpiu09'), or task title/name",
         },
       },
       required: ["identifier"],
@@ -1390,13 +1671,20 @@ const TOOLS = [
     name: "tasks_add_comment",
     description:
       "Add a comment to a task. Accepts any task identifier: UUID, short_id, or task title. The response includes the task dashboard URL — always show it to the user.",
-    annotations: { title: "Add Task Comment", readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+    annotations: {
+      title: "Add Task Comment",
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+      openWorldHint: false,
+    },
     inputSchema: {
       type: "object" as const,
       properties: {
         identifier: {
           type: "string",
-          description: "Task identifier — can be a UUID, short_id (e.g. 'hpiu09'), or task title/name",
+          description:
+            "Task identifier — can be a UUID, short_id (e.g. 'hpiu09'), or task title/name",
         },
         content: {
           type: "string",
@@ -1411,7 +1699,13 @@ const TOOLS = [
     name: "collaborators_list",
     description:
       "List collaborators on a shared project. Shows who has access and what tasks are assigned to them.",
-    annotations: { title: "List Collaborators", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    annotations: {
+      title: "List Collaborators",
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -1434,7 +1728,13 @@ const TOOLS = [
     name: "project_share",
     description:
       "Share a project with a collaborator by email. Creates an invitation and returns the invite URL. An email notification may also be sent.",
-    annotations: { title: "Share Project", readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    annotations: {
+      title: "Share Project",
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -1464,7 +1764,13 @@ const TOOLS = [
     name: "skills_list",
     description:
       "List all Skills in a project. Returns skills with their name, description, model, and prompt body.",
-    annotations: { title: "List Skills", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    annotations: {
+      title: "List Skills",
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -1476,7 +1782,13 @@ const TOOLS = [
   {
     name: "skills_get",
     description: "Get a single Skill by ID with full body.",
-    annotations: { title: "Get Skill", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    annotations: {
+      title: "Get Skill",
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -1489,7 +1801,13 @@ const TOOLS = [
     name: "skills_create",
     description:
       "Create a new Skill in a project. The 'body' is a markdown prompt template that may use {{variable}} placeholders for input_params at run time.",
-    annotations: { title: "Create Skill", readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+    annotations: {
+      title: "Create Skill",
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+      openWorldHint: false,
+    },
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -1523,7 +1841,13 @@ const TOOLS = [
   {
     name: "skills_update",
     description: "Update an existing Skill.",
-    annotations: { title: "Update Skill", readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    annotations: {
+      title: "Update Skill",
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -1542,7 +1866,13 @@ const TOOLS = [
   {
     name: "skills_delete",
     description: "Delete a Skill.",
-    annotations: { title: "Delete Skill", readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
+    annotations: {
+      title: "Delete Skill",
+      readOnlyHint: false,
+      destructiveHint: true,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -1555,7 +1885,13 @@ const TOOLS = [
     name: "skills_run",
     description:
       "Execute a Skill on the configured LLM, optionally storing the output as a knowledge_item, and returns the result. Available to all project members.",
-    annotations: { title: "Run Skill", readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+    annotations: {
+      title: "Run Skill",
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+      openWorldHint: true,
+    },
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -1572,7 +1908,13 @@ const TOOLS = [
     name: "routines_list",
     description:
       "List all Routines in a project. Returns routines with their schedule, last/next run, and enabled flag.",
-    annotations: { title: "List Routines", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    annotations: {
+      title: "List Routines",
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -1585,7 +1927,13 @@ const TOOLS = [
     name: "routines_get",
     description:
       "Get a single Routine by ID, including its cron expression, input_params, and last/next run.",
-    annotations: { title: "Get Routine", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    annotations: {
+      title: "Get Routine",
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
     inputSchema: {
       type: "object" as const,
       properties: { id: { type: "string", description: "Routine UUID" } },
@@ -1596,7 +1944,13 @@ const TOOLS = [
     name: "routines_create",
     description:
       "Create a new Routine. Schedules a Skill to run on a cron expression. Pass either schedule_preset (hourly/daily/weekly/monthly) OR a custom cron_expression. timezone defaults to UTC.",
-    annotations: { title: "Create Routine", readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+    annotations: {
+      title: "Create Routine",
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+      openWorldHint: false,
+    },
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -1618,8 +1972,7 @@ const TOOLS = [
         },
         input_params: {
           type: "object",
-          description:
-            "Variables substituted into the Skill body at each run",
+          description: "Variables substituted into the Skill body at each run",
         },
       },
       required: ["project_id", "skill_id", "name"],
@@ -1629,7 +1982,13 @@ const TOOLS = [
     name: "routines_update",
     description:
       "Update an existing Routine (name, schedule, timezone, input_params).",
-    annotations: { title: "Update Routine", readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    annotations: {
+      title: "Update Routine",
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -1650,7 +2009,13 @@ const TOOLS = [
     name: "routines_toggle",
     description:
       "Enable or disable a Routine without deleting it. Pass enabled=false to pause.",
-    annotations: { title: "Toggle Routine", readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    annotations: {
+      title: "Toggle Routine",
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -1664,7 +2029,13 @@ const TOOLS = [
     name: "routines_run_now",
     description:
       "Fire a Routine immediately, ahead of its schedule. Creates a skill_executions row with trigger_type=scheduled and routine_id set, just like the cron tick would.",
-    annotations: { title: "Run Routine Now", readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+    annotations: {
+      title: "Run Routine Now",
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+      openWorldHint: false,
+    },
     inputSchema: {
       type: "object" as const,
       properties: { id: { type: "string" } },
@@ -1675,7 +2046,13 @@ const TOOLS = [
     name: "routines_delete",
     description:
       "Permanently delete a Routine. Execution history rows are retained.",
-    annotations: { title: "Delete Routine", readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
+    annotations: {
+      title: "Delete Routine",
+      readOnlyHint: false,
+      destructiveHint: true,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
     inputSchema: {
       type: "object" as const,
       properties: { id: { type: "string" } },
@@ -1695,7 +2072,8 @@ const TOOLS = [
         },
         label: {
           type: "string",
-          description: "Optional session name (defaults to the working directory name)",
+          description:
+            "Optional session name (defaults to the working directory name)",
         },
       },
       required: ["focus"],
@@ -1710,15 +2088,18 @@ const TOOLS = [
       properties: {
         project: {
           type: "string",
-          description: "Scope to a specific project id or name instead of the current one",
+          description:
+            "Scope to a specific project id or name instead of the current one",
         },
         all_projects: {
           type: "boolean",
-          description: "List sessions across the whole organization instead of just the current project. Ignored when `project` is also provided.",
+          description:
+            "List sessions across the whole organization instead of just the current project. Ignored when `project` is also provided.",
         },
         include_stale: {
           type: "boolean",
-          description: "Also include sessions whose heartbeat is older than the 10-minute TTL",
+          description:
+            "Also include sessions whose heartbeat is older than the 10-minute TTL",
         },
       },
     },
@@ -1772,6 +2153,7 @@ async function main() {
   console.error("");
 
   checkForUpdates(VERSION, colors).catch(() => {});
+  checkInitHint(process.cwd());
 
   const server = new Server(
     {
@@ -1925,10 +2307,13 @@ async function main() {
           const expanded = (result as any).expanded_results;
           if (expanded && expanded.length > 0) {
             const expandedLines = expanded.map((r: any, idx: number) => {
-              const score = r.score ? ` (${Math.round(r.score * 100)}% match)` : "";
+              const score = r.score
+                ? ` (${Math.round(r.score * 100)}% match)`
+                : "";
               const tags = r.tags?.length ? `\n  🏷️ ${r.tags.join(", ")}` : "";
               const preview = r.content
-                ? r.content.slice(0, 150).replace(/\n/g, " ") + (r.content.length > 150 ? "..." : "")
+                ? r.content.slice(0, 150).replace(/\n/g, " ") +
+                  (r.content.length > 150 ? "..." : "")
                 : "";
               return `${idx + 1}. ${r.title || "Untitled"}${score}\n  🆔 ${r.id}\n  🔗 ${r.relationship_type} → ${r.expanded_from}\n  📄 ${preview}${tags}`;
             });
@@ -1964,12 +2349,22 @@ async function main() {
             };
           }
 
-          logSuccess(`Retrieved item "${item.title || "Untitled"}" in ${elapsed}ms`);
+          logSuccess(
+            `Retrieved item "${item.title || "Untitled"}" in ${elapsed}ms`,
+          );
 
-          const tags = item.tags?.length ? `\n🏷️ Tags: ${item.tags.join(", ")}` : "";
-          const category = item.category ? `\n📁 Category: ${item.category}` : "";
-          const source = item.source_uri ? `\n🔗 Source: ${item.source_uri}` : "";
-          const created = item.created_at ? `\n📅 Created: ${new Date(item.created_at).toLocaleString()}` : "";
+          const tags = item.tags?.length
+            ? `\n🏷️ Tags: ${item.tags.join(", ")}`
+            : "";
+          const category = item.category
+            ? `\n📁 Category: ${item.category}`
+            : "";
+          const source = item.source_uri
+            ? `\n🔗 Source: ${item.source_uri}`
+            : "";
+          const created = item.created_at
+            ? `\n📅 Created: ${new Date(item.created_at).toLocaleString()}`
+            : "";
 
           return {
             content: [
@@ -2052,10 +2447,7 @@ async function main() {
           const projectId = (args as any)?.project_id;
           const projectName = (args as any)?.project_name;
           const spaceType = (args as any)?.space_type as
-            | "regular"
-            | "git"
-            | "all"
-            | undefined;
+            "regular" | "git" | "all" | undefined;
 
           // Use linked project if no project filter specified
           let resolvedProjectId = projectId;
@@ -3161,7 +3553,8 @@ async function main() {
             const createdBy = i.created_by_email
               ? `\n  ✍️ Created by: ${i.created_by_email}`
               : "";
-            const commentInfo = i.comment_count > 0 ? ` | 💬 ${i.comment_count}` : "";
+            const commentInfo =
+              i.comment_count > 0 ? ` | 💬 ${i.comment_count}` : "";
             const taskUrl = `\n  🔗 ${getTaskDashboardUrl(i.id)}`;
             return `[${i.short_id}] ${i.title}\n  ${statusEmoji} ${i.status} | ${priorityLabel} ${i.priority} | 📁 ${i.project?.name || "No project"}${commentInfo}${resolvedBy}${createdBy}${taskUrl}`;
           });
@@ -3181,22 +3574,33 @@ async function main() {
         case "tasks_start": {
           const ident = resolveTaskIdentifier(args);
           if (!ident) {
-            throw new Error("identifier is required — pass a UUID, short_id, or task title");
+            throw new Error(
+              "identifier is required — pass a UUID, short_id, or task title",
+            );
           }
           logTool(name, ident.value);
 
           let result;
           if (ident.type === "title") {
             // Find by title first, then start
-            const { issues } = await apiClient.listTasks({ status: "all", limit: 100 });
+            const { issues } = await apiClient.listTasks({
+              status: "all",
+              limit: 100,
+            });
             const titleLower = ident.value.toLowerCase();
-            const match = issues?.find((i: any) =>
-              i.title.toLowerCase().includes(titleLower) || i.title.toLowerCase() === titleLower
+            const match = issues?.find(
+              (i: any) =>
+                i.title.toLowerCase().includes(titleLower) ||
+                i.title.toLowerCase() === titleLower,
             );
-            if (!match) throw new Error(`No task found matching "${ident.value}"`);
+            if (!match)
+              throw new Error(`No task found matching "${ident.value}"`);
             result = await apiClient.updateTaskStatus(match.id, "in_progress");
           } else {
-            result = await apiClient.updateTaskStatus(ident.value, "in_progress");
+            result = await apiClient.updateTaskStatus(
+              ident.value,
+              "in_progress",
+            );
           }
           const elapsed = Date.now() - startTime;
 
@@ -3208,14 +3612,15 @@ async function main() {
             content: [
               {
                 type: "text" as const,
-                text: formatResponse({
-                  message: `▶️ Now working on: ${result.issue?.title}`,
-                  hint: "Use tasks_resolve when you complete this task",
-                  details: {
-                    id: result.issue?.id,
-                    description: result.issue?.description,
-                  },
-                }) + `\n\n🔗 ${getTaskDashboardUrl(result.issue?.id)}`,
+                text:
+                  formatResponse({
+                    message: `▶️ Now working on: ${result.issue?.title}`,
+                    hint: "Use tasks_resolve when you complete this task",
+                    details: {
+                      id: result.issue?.id,
+                      description: result.issue?.description,
+                    },
+                  }) + `\n\n🔗 ${getTaskDashboardUrl(result.issue?.id)}`,
               },
             ],
           };
@@ -3224,7 +3629,9 @@ async function main() {
         case "tasks_resolve": {
           const ident = resolveTaskIdentifier(args);
           if (!ident) {
-            throw new Error("identifier is required — pass a UUID, short_id, or task title");
+            throw new Error(
+              "identifier is required — pass a UUID, short_id, or task title",
+            );
           }
           logTool(name, ident.value);
 
@@ -3244,10 +3651,11 @@ async function main() {
             content: [
               {
                 type: "text" as const,
-                text: formatResponse({
-                  message: `✅ Task resolved: ${result.issue?.title}`,
-                  hint: "Use tasks_what_next to see your next task",
-                }) + `\n\n🔗 ${getTaskDashboardUrl(result.issue?.id)}`,
+                text:
+                  formatResponse({
+                    message: `✅ Task resolved: ${result.issue?.title}`,
+                    hint: "Use tasks_what_next to see your next task",
+                  }) + `\n\n🔗 ${getTaskDashboardUrl(result.issue?.id)}`,
               },
             ],
           };
@@ -3306,7 +3714,8 @@ async function main() {
           const priority = (args as any)?.priority || "medium";
           const assigneeEmail = (args as any)?.assignee_email;
           const dueDate = (args as any)?.due_date;
-          const tags = parseArrayInput((args as any)?.tags) as string[] | undefined;
+          const tags = parseArrayInput((args as any)?.tags) as
+            string[] | undefined;
           const spaceId = (args as any)?.space_id;
 
           if (!title) {
@@ -3334,18 +3743,19 @@ async function main() {
             content: [
               {
                 type: "text" as const,
-                text: formatResponse({
-                  message: `➕ Task created: [${result.issue?.short_id}] ${result.issue?.title}`,
-                  hint: assigneeEmail
-                    ? `Assigned to ${assigneeEmail}`
-                    : "Use tasks_assign to assign this task to a collaborator",
-                  details: {
-                    id: result.issue?.short_id,
-                    title: result.issue?.title,
-                    priority: result.issue?.priority,
-                    project: result.issue?.project?.name,
-                  },
-                }) + `\n\n🔗 ${getTaskDashboardUrl(result.issue?.id)}`,
+                text:
+                  formatResponse({
+                    message: `➕ Task created: [${result.issue?.short_id}] ${result.issue?.title}`,
+                    hint: assigneeEmail
+                      ? `Assigned to ${assigneeEmail}`
+                      : "Use tasks_assign to assign this task to a collaborator",
+                    details: {
+                      id: result.issue?.short_id,
+                      title: result.issue?.title,
+                      priority: result.issue?.priority,
+                      project: result.issue?.project?.name,
+                    },
+                  }) + `\n\n🔗 ${getTaskDashboardUrl(result.issue?.id)}`,
               },
             ],
           };
@@ -3359,7 +3769,9 @@ async function main() {
             throw new Error("assignee_email is required");
           }
           if (!ident) {
-            throw new Error("identifier is required — pass a UUID, short_id, or task title");
+            throw new Error(
+              "identifier is required — pass a UUID, short_id, or task title",
+            );
           }
 
           logTool(name, `→ ${assigneeEmail}`);
@@ -3390,7 +3802,9 @@ async function main() {
           const ident = resolveTaskIdentifier(args);
 
           if (!ident) {
-            throw new Error("identifier is required — pass a title, short_id, or UUID");
+            throw new Error(
+              "identifier is required — pass a title, short_id, or UUID",
+            );
           }
 
           logTool(name, `"${ident.value}"`);
@@ -3410,10 +3824,11 @@ async function main() {
             content: [
               {
                 type: "text" as const,
-                text: formatResponse({
-                  message: `✅ Task resolved: ${result.issue?.title}`,
-                  hint: "Use tasks_what_next to see your next task",
-                }) + `\n\n🔗 ${getTaskDashboardUrl(result.issue?.id)}`,
+                text:
+                  formatResponse({
+                    message: `✅ Task resolved: ${result.issue?.title}`,
+                    hint: "Use tasks_what_next to see your next task",
+                  }) + `\n\n🔗 ${getTaskDashboardUrl(result.issue?.id)}`,
               },
             ],
           };
@@ -3423,19 +3838,27 @@ async function main() {
           const ident = resolveTaskIdentifier(args);
 
           if (!ident) {
-            throw new Error("identifier is required — pass a UUID, short_id, or task title");
+            throw new Error(
+              "identifier is required — pass a UUID, short_id, or task title",
+            );
           }
 
           logTool(name, ident.value);
 
           let deleteId = ident.value;
           if (ident.type === "title") {
-            const { issues } = await apiClient.listTasks({ status: "all", limit: 100 });
+            const { issues } = await apiClient.listTasks({
+              status: "all",
+              limit: 100,
+            });
             const titleLower = ident.value.toLowerCase();
-            const match = issues?.find((i: any) =>
-              i.title.toLowerCase().includes(titleLower) || i.title.toLowerCase() === titleLower
+            const match = issues?.find(
+              (i: any) =>
+                i.title.toLowerCase().includes(titleLower) ||
+                i.title.toLowerCase() === titleLower,
             );
-            if (!match) throw new Error(`No task found matching "${ident.value}"`);
+            if (!match)
+              throw new Error(`No task found matching "${ident.value}"`);
             deleteId = match.id;
           }
 
@@ -3461,19 +3884,27 @@ async function main() {
           const ident = resolveTaskIdentifier(args);
 
           if (!ident) {
-            throw new Error("identifier is required — pass a UUID, short_id, or task title");
+            throw new Error(
+              "identifier is required — pass a UUID, short_id, or task title",
+            );
           }
 
           // Resolve title to UUID/short_id for the API
           let issueId = ident.type === "uuid" ? ident.value : undefined;
           let shortId = ident.type === "short_id" ? ident.value : undefined;
           if (ident.type === "title") {
-            const { issues } = await apiClient.listTasks({ status: "all", limit: 100 });
+            const { issues } = await apiClient.listTasks({
+              status: "all",
+              limit: 100,
+            });
             const titleLower = ident.value.toLowerCase();
-            const match = issues?.find((i: any) =>
-              i.title.toLowerCase().includes(titleLower) || i.title.toLowerCase() === titleLower
+            const match = issues?.find(
+              (i: any) =>
+                i.title.toLowerCase().includes(titleLower) ||
+                i.title.toLowerCase() === titleLower,
             );
-            if (!match) throw new Error(`No task found matching "${ident.value}"`);
+            if (!match)
+              throw new Error(`No task found matching "${ident.value}"`);
             issueId = match.id;
           }
 
@@ -3517,17 +3948,18 @@ async function main() {
             content: [
               {
                 type: "text" as const,
-                text: formatResponse({
-                  message: `✏️ Task updated: [${result.issue?.short_id}] ${result.issue?.title}`,
-                  hint: `Updated fields: ${updatedFieldNames}`,
-                  details: {
-                    id: result.issue?.short_id,
-                    title: result.issue?.title,
-                    status: result.issue?.status,
-                    priority: result.issue?.priority,
-                    project: result.issue?.project?.name,
-                  },
-                }) + `\n\n🔗 ${getTaskDashboardUrl(result.issue?.id)}`,
+                text:
+                  formatResponse({
+                    message: `✏️ Task updated: [${result.issue?.short_id}] ${result.issue?.title}`,
+                    hint: `Updated fields: ${updatedFieldNames}`,
+                    details: {
+                      id: result.issue?.short_id,
+                      title: result.issue?.title,
+                      status: result.issue?.status,
+                      priority: result.issue?.priority,
+                      project: result.issue?.project?.name,
+                    },
+                  }) + `\n\n🔗 ${getTaskDashboardUrl(result.issue?.id)}`,
               },
             ],
           };
@@ -3536,7 +3968,9 @@ async function main() {
         case "tasks_list_comments": {
           const ident = resolveTaskIdentifier(args);
           if (!ident) {
-            throw new Error("identifier is required — pass a UUID, short_id, or task title");
+            throw new Error(
+              "identifier is required — pass a UUID, short_id, or task title",
+            );
           }
 
           logTool(name, ident.value);
@@ -3558,7 +3992,8 @@ async function main() {
               const titleLower = ident.value.toLowerCase();
               match = issues?.find(
                 (i: any) =>
-                  i.title.toLowerCase().includes(titleLower) || i.title.toLowerCase() === titleLower,
+                  i.title.toLowerCase().includes(titleLower) ||
+                  i.title.toLowerCase() === titleLower,
               );
             }
             if (!match) {
@@ -3611,7 +4046,9 @@ async function main() {
           const content = (args as any)?.content;
 
           if (!ident) {
-            throw new Error("identifier is required — pass a UUID, short_id, or task title");
+            throw new Error(
+              "identifier is required — pass a UUID, short_id, or task title",
+            );
           }
           if (!content) {
             throw new Error("content is required");
@@ -3636,7 +4073,8 @@ async function main() {
               const titleLower = ident.value.toLowerCase();
               match = issues?.find(
                 (i: any) =>
-                  i.title.toLowerCase().includes(titleLower) || i.title.toLowerCase() === titleLower,
+                  i.title.toLowerCase().includes(titleLower) ||
+                  i.title.toLowerCase() === titleLower,
               );
             }
             if (!match) {
@@ -4121,7 +4559,10 @@ https://github.com/alfredoizdev/contextforge-mcp
 
         case "routines_toggle": {
           const input = RoutinesToggleInputSchema.parse(args);
-          logTool(name, `${input.id} → ${input.enabled ? "enabled" : "paused"}`);
+          logTool(
+            name,
+            `${input.id} → ${input.enabled ? "enabled" : "paused"}`,
+          );
           const routine = await apiClient.toggleRoutine(input);
           const verb = input.enabled ? "enabled" : "paused";
           return {
@@ -4176,13 +4617,19 @@ https://github.com/alfredoizdev/contextforge-mcp
           if (!focus) {
             return {
               content: [
-                { type: "text" as const, text: "Error: 'focus' is required — describe what this session is working on." },
+                {
+                  type: "text" as const,
+                  text: "Error: 'focus' is required — describe what this session is working on.",
+                },
               ],
               isError: true,
             };
           }
           const label =
-            typeof args === "object" && args !== null && "label" in args && args.label
+            typeof args === "object" &&
+            args !== null &&
+            "label" in args &&
+            args.label
               ? String(args.label)
               : undefined;
 
@@ -4230,7 +4677,12 @@ https://github.com/alfredoizdev/contextforge-mcp
           //                          otherwise org-wide (nothing to scope to)
           let projectId: string | undefined;
           let scope: "named" | "current" | "org" = "org";
-          if (typeof args === "object" && args !== null && "project" in args && args.project) {
+          if (
+            typeof args === "object" &&
+            args !== null &&
+            "project" in args &&
+            args.project
+          ) {
             const requested = String(args.project);
             projectId = await apiClient.resolveProjectId(requested);
             if (!projectId) {
@@ -4261,7 +4713,9 @@ https://github.com/alfredoizdev/contextforge-mcp
           const own = presence.getSessionId();
           const sessions = all.filter((s) => s.id !== own);
           const elapsed = Date.now() - startTime;
-          logSuccess(`Listed ${sessions.length} peer session(s) in ${elapsed}ms`);
+          logSuccess(
+            `Listed ${sessions.length} peer session(s) in ${elapsed}ms`,
+          );
 
           // Name the scope so the agent knows whether "none" means "none in
           // this project" or "none anywhere", and can widen with all_projects.
@@ -4384,14 +4838,17 @@ https://github.com/alfredoizdev/contextforge-mcp
     }
   };
 
-  // Wrap handler to append update notice to successful responses
+  // Wrap handler to append one-time notices (update available, init hint)
+  // to successful text responses.
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const result = await originalHandler(request);
-    const notice = getUpdateNotice();
-    if (notice && !result.isError && result.content?.length > 0) {
+    if (!result.isError && result.content?.length > 0) {
       const last = result.content[result.content.length - 1];
       if (last.type === "text") {
-        last.text += notice;
+        const notice = getUpdateNotice();
+        if (notice) last.text += notice;
+        const hint = consumeInitHint();
+        if (hint) last.text += hint;
       }
     }
     return result;
