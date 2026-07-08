@@ -52,6 +52,9 @@ export function computeInitHint(
   cacheFile: string = DEFAULT_CACHE_FILE,
 ): string | null {
   try {
+    // Claude Desktop bundles have no CLAUDE.md workflow — the MCPB manifest
+    // sets this env var so desktop users never see the init tip.
+    if (process.env.CONTEXTFORGE_DISABLE_INIT_HINT === "1") return null;
     const claudeMd = join(cwd, "CLAUDE.md");
     if (
       existsSync(claudeMd) &&

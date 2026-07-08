@@ -72,4 +72,14 @@ describe("init hint", () => {
     checkInitHint(tmp, cacheFile);
     expect(consumeInitHint(cacheFile)).toBe("");
   });
+
+  it("does not hint when CONTEXTFORGE_DISABLE_INIT_HINT=1 (desktop bundle)", () => {
+    writeFileSync(join(tmp, "CLAUDE.md"), "# project\n");
+    process.env.CONTEXTFORGE_DISABLE_INIT_HINT = "1";
+    try {
+      expect(computeInitHint(tmp, cacheFile)).toBeNull();
+    } finally {
+      delete process.env.CONTEXTFORGE_DISABLE_INIT_HINT;
+    }
+  });
 });
