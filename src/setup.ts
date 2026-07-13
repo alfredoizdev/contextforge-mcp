@@ -5,6 +5,7 @@ import { execSync, spawn } from 'child_process';
 import { existsSync, readFileSync } from 'fs';
 import { homedir } from 'os';
 import { join } from 'path';
+import { validateKey } from './validate-key.js';
 
 // ============ Colors ============
 const colors = {
@@ -224,6 +225,22 @@ async function runSetup() {
     printError('Invalid API key format. Please check your API key and try again.');
     rl.close();
     process.exit(1);
+  }
+
+  // Validate the key against the backend before writing any config, so a bad
+  // key is caught now instead of silently failing every tool call later.
+  print('');
+  printDim('Verifying your API key…');
+  const keyCheck = await validateKey(apiKey);
+  if (!keyCheck.ok && keyCheck.reason === 'invalid') {
+    print('');
+    printError('That API key was rejected by ContextForge.');
+    printDim('Create a fresh key at https://contextforge.dev/dashboard/api-keys and run npx contextforge-setup again.');
+    rl.close();
+    process.exit(1);
+  }
+  if (!keyCheck.ok) {
+    printDim('Could not reach ContextForge to verify the key (network). Continuing; run `npx contextforge-setup --verify` later.');
   }
 
   print('');
