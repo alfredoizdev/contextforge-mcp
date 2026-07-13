@@ -242,7 +242,7 @@ async function runSetup() {
       }
 
       // Run claude mcp add command
-      const command = `claude mcp add contextforge -s user -e CONTEXTFORGE_API_KEY=${apiKey} -- contextforge-mcp`;
+      const command = `claude mcp add contextforge -s user -e CONTEXTFORGE_API_KEY=${apiKey} -- npx -y contextforge-mcp`;
 
       execSync(command, { stdio: 'inherit' });
 
@@ -278,7 +278,7 @@ async function runSetup() {
             } catch {
               // Not configured yet — nothing to remove.
             }
-            const retryCommand = `claude mcp add contextforge -s user -e CONTEXTFORGE_API_KEY=${newApiKey} -- contextforge-mcp`;
+            const retryCommand = `claude mcp add contextforge -s user -e CONTEXTFORGE_API_KEY=${newApiKey} -- npx -y contextforge-mcp`;
             execSync(retryCommand, { stdio: 'inherit' });
             print('');
             print('─'.repeat(60));
@@ -344,7 +344,7 @@ function printManualInstructions(apiKey: string) {
   print(`First install Claude CLI, then run:`);
   print('');
   printDim(`  claude mcp remove contextforge   # skip if not yet configured`);
-  printDim(`  claude mcp add contextforge -s user -e CONTEXTFORGE_API_KEY=${apiKey} -- contextforge-mcp`);
+  printDim(`  claude mcp add contextforge -s user -e CONTEXTFORGE_API_KEY=${apiKey} -- npx -y contextforge-mcp`);
   print('');
   print(`${colors.cyan}Option 2: Edit config manually${colors.reset}`);
   print(`Add to your claude_desktop_config.json:`);
@@ -353,7 +353,8 @@ function printManualInstructions(apiKey: string) {
   const configSnippet = {
     mcpServers: {
       contextforge: {
-        command: 'contextforge-mcp',
+        command: 'npx',
+        args: ['-y', 'contextforge-mcp'],
         env: {
           CONTEXTFORGE_API_KEY: apiKey
         }
