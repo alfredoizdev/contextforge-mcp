@@ -605,7 +605,7 @@ export class ApiClient {
         },
       ],
       options: {
-        deduplicate: true,
+        deduplicate: input.deduplicate ?? true,
         chunk_large_content: true,
       },
     });
