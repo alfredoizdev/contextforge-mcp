@@ -62,6 +62,7 @@ import { createRequire } from "module";
 import { basename } from "path";
 import { checkForUpdates, getUpdateNotice } from "./update-checker.js";
 import { formatIngestResult } from "./format-ingest.js";
+import { validateKey } from "./validate-key.js";
 import { runInitCLI } from "./init.js";
 import { checkInitHint, consumeInitHint } from "./init-hint.js";
 import { SessionPresence } from "./session-presence.js";
@@ -2123,6 +2124,19 @@ const TOOLS = [
 async function main() {
   const config = loadConfig();
   const apiClient = new ApiClient(config);
+
+  // Best-effort: warn on stderr if the key is already rejected, so a bad key
+  // is visible at startup instead of "connected" then every tool failing.
+  // Never blocks or delays the server (stdio stays clean).
+  validateKey(config.apiKey)
+    .then((r) => {
+      if (!r.ok && r.reason === "invalid") {
+        console.error(
+          `${colors.red}⚠ ContextForge: your API key was rejected. Memory tools will fail until you fix it — create a new key at https://contextforge.dev/dashboard/api-keys${colors.reset}`,
+        );
+      }
+    })
+    .catch(() => {});
 
   // Live session presence: one MCP process == one Claude Code session.
   // Registration is lazy (first tool call); heartbeat + exit hooks are
