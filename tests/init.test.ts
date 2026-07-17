@@ -13,8 +13,10 @@ import {
   runInit,
   INIT_MARKER,
   PRESENCE_MARKER,
+  STARTUP_MARKER,
   CLAUDE_MEMORY_SECTION,
   CLAUDE_PRESENCE_SECTION,
+  CLAUDE_STARTUP_SECTION,
   detectEditors,
 } from "../src/init.js";
 
@@ -34,7 +36,7 @@ describe("runInit", () => {
     rmSync(tmp, { recursive: true, force: true });
   });
 
-  it("creates a new CLAUDE.md with both sections", () => {
+  it("creates a new CLAUDE.md with all sections", () => {
     const results = runInit(tmp, { editor: "claude" });
     expect(results).toHaveLength(1);
     expect(results[0].fileCreated).toBe(true);
@@ -43,15 +45,21 @@ describe("runInit", () => {
     expect(actions(results[0])).toEqual({
       memory: "created",
       presence: "created",
+      startup: "created",
     });
 
     const written = readFileSync(results[0].path, "utf-8");
     expect(written).toContain(INIT_MARKER);
     expect(written).toContain(PRESENCE_MARKER);
+    expect(written).toContain(STARTUP_MARKER);
     expect(written).toContain("ContextForge MCP — Memory Rules");
     expect(written).toContain("Session Presence — Coordination Rules");
+    expect(written).toContain("ContextForge MCP — Startup Context Rule");
     expect(written.indexOf(INIT_MARKER)).toBeLessThan(
       written.indexOf(PRESENCE_MARKER),
+    );
+    expect(written.indexOf(PRESENCE_MARKER)).toBeLessThan(
+      written.indexOf(STARTUP_MARKER),
     );
   });
 
@@ -66,6 +74,7 @@ describe("runInit", () => {
     expect(actions(results[0])).toEqual({
       memory: "appended",
       presence: "appended",
+      startup: "appended",
     });
 
     const written = readFileSync(claudeMdPath, "utf-8");
@@ -78,25 +87,28 @@ describe("runInit", () => {
     );
   });
 
-  it("UPGRADE: appends only presence to a pre-presence CLAUDE.md, preserving everything", () => {
+  it("UPGRADE: a memory+presence CLAUDE.md receives only startup, preserving everything", () => {
     const claudeMdPath = join(tmp, "CLAUDE.md");
     const preUpgrade =
       "# My project\n\n" +
       CLAUDE_MEMORY_SECTION +
+      "\n" +
+      CLAUDE_PRESENCE_SECTION +
       "\n## My own rules\nkeep me exactly\n";
     writeFileSync(claudeMdPath, preUpgrade);
 
     const results = runInit(tmp, { editor: "claude" });
     expect(actions(results[0])).toEqual({
       memory: "already-present",
-      presence: "appended",
+      presence: "already-present",
+      startup: "appended",
     });
 
     const written = readFileSync(claudeMdPath, "utf-8");
     expect(written.startsWith(preUpgrade)).toBe(true);
     expect(written).toContain("keep me exactly");
+    expect(written.split(STARTUP_MARKER).length - 1).toBe(1);
     expect(written.split(PRESENCE_MARKER).length - 1).toBe(1);
-    expect(written.split(INIT_MARKER).length - 1).toBe(1);
   });
 
   it("is fully idempotent when both markers are present", () => {
@@ -108,6 +120,7 @@ describe("runInit", () => {
     expect(actions(second[0])).toEqual({
       memory: "already-present",
       presence: "already-present",
+      startup: "already-present",
     });
     expect(readFileSync(join(tmp, "CLAUDE.md"), "utf-8")).toBe(before);
   });
@@ -120,6 +133,7 @@ describe("runInit", () => {
     expect(actions(results[0])).toEqual({
       memory: "appended",
       presence: "already-present",
+      startup: "appended",
     });
   });
 
@@ -145,6 +159,7 @@ describe("runInit", () => {
     const written = readFileSync(results[0].path, "utf-8");
     expect(written).toContain(INIT_MARKER);
     expect(written).toContain(PRESENCE_MARKER);
+    expect(written).toContain(STARTUP_MARKER);
     expect(written).toContain("Session Presence — Coordination Rules");
   });
 
@@ -157,6 +172,7 @@ describe("runInit", () => {
     expect(actions(results[0])).toEqual({
       memory: "already-present",
       presence: "appended",
+      startup: "appended",
     });
 
     const written = readFileSync(cursorRulesPath, "utf-8");

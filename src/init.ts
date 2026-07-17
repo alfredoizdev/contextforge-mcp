@@ -7,6 +7,9 @@ export const INIT_MARKER = "<!-- contextforge-mcp:init -->";
 /** Hidden sentinel for the Session Presence section. */
 export const PRESENCE_MARKER = "<!-- contextforge-mcp:presence -->";
 
+/** Hidden sentinel for the Startup Context section. */
+export const STARTUP_MARKER = "<!-- contextforge-mcp:startup -->";
+
 /** CLAUDE.md content appended (or written fresh) by `contextforge-mcp init`. */
 export const CLAUDE_MEMORY_SECTION = `${INIT_MARKER}
 
@@ -127,6 +130,68 @@ Multiple AI coding sessions (Claude Code, Cursor, Copilot) may work on this proj
 - ❌ Leave your focus empty while doing significant work
 `;
 
+/** Startup Context section appended to CLAUDE.md. */
+export const CLAUDE_STARTUP_SECTION = `${STARTUP_MARKER}
+
+## ContextForge MCP — Startup Context Rule
+
+At the START of every new conversation, BEFORE responding to the user's first message, load project context from ContextForge so you don't start blind.
+
+### Required actions on the first message — run in parallel:
+1. \`mcp__contextforge__memory_query\` — query: "project overview what is this project"
+2. \`mcp__contextforge__tasks_list\` — status: "in_progress"
+3. \`mcp__contextforge__tasks_list\` — status: "pending"
+4. \`mcp__contextforge__session_list\`  (also covers the Session Presence start-of-conversation check)
+
+### Then show this summary BEFORE answering (keep it short):
+- 📋 Project Context Loaded
+- Project: [name + one-line description from memory]
+- In progress: [count] task(s)
+- Pending (sorted by due date, earliest first): [up to 5, with due date + priority]
+- Overdue: [count if any — surface at the top]
+- Active sessions: [count, or "none"]
+
+Then address the user's request.
+
+### Rules
+- If the MCP returns nothing / "no project linked" → skip the summary, suggest \`mcp__contextforge__memory_link_project\`, and continue.
+- Keep the summary short (this runs every conversation) — never dump raw tool output.
+- If the user's first message is unrelated (e.g. a quick bug fix) → still show the summary, then continue with their request.
+
+This rule is non-negotiable.
+`;
+
+/** Startup Context section appended to .cursorrules. */
+export const CURSOR_STARTUP_SECTION = `${STARTUP_MARKER}
+
+# ContextForge MCP — Startup Context Rule
+
+At the START of every new conversation, BEFORE responding to the user's first message, load project context so you don't start blind.
+
+## Required actions on the first message — run in parallel:
+1. \`mcp__contextforge__memory_query\` — query: "project overview what is this project"
+2. \`mcp__contextforge__tasks_list\` — status: "in_progress"
+3. \`mcp__contextforge__tasks_list\` — status: "pending"
+4. \`mcp__contextforge__session_list\`  (also covers the Session Presence start-of-conversation check)
+
+## Then show this summary BEFORE answering (keep it short):
+- 📋 Project Context Loaded
+- Project: [name + one-line description from memory]
+- In progress: [count] task(s)
+- Pending (sorted by due date, earliest first): [up to 5, with due date + priority]
+- Overdue: [count if any — surface at the top]
+- Active sessions: [count, or "none"]
+
+Then address the user's request.
+
+## Rules
+- If the MCP returns nothing / "no project linked" → skip the summary, suggest \`mcp__contextforge__memory_link_project\`, and continue.
+- Keep the summary short (this runs every conversation) — never dump raw tool output.
+- If the user's first message is unrelated (e.g. a quick bug fix) → still show the summary, then continue with their request.
+
+This rule is non-negotiable.
+`;
+
 /** Editors that `init` can generate rules for. */
 export type Editor = "claude" | "cursor";
 
@@ -201,6 +266,12 @@ const EDITOR_FILES: Record<
         marker: PRESENCE_MARKER,
         content: CLAUDE_PRESENCE_SECTION,
       },
+      {
+        id: "startup",
+        title: "Startup Context rules",
+        marker: STARTUP_MARKER,
+        content: CLAUDE_STARTUP_SECTION,
+      },
     ],
   },
   cursor: {
@@ -217,6 +288,12 @@ const EDITOR_FILES: Record<
         title: "Session Presence rules",
         marker: PRESENCE_MARKER,
         content: CURSOR_PRESENCE_SECTION,
+      },
+      {
+        id: "startup",
+        title: "Startup Context rules",
+        marker: STARTUP_MARKER,
+        content: CURSOR_STARTUP_SECTION,
       },
     ],
   },
