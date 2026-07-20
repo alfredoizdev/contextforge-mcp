@@ -247,6 +247,23 @@ export class ApiClientError extends Error {
   }
 }
 
+/** Builds an ApiClientError from either backend error shape:
+ * `{error: <code>, message: <human>}` (auth) or `{error: <human>, code}`
+ * (ingest/query). Deriving code defensively keeps getUserFriendlyMessage and
+ * the isAuthError/isQuotaError flags alive for both — otherwise the auth shape
+ * leaves `code` undefined and every friendly message/flag falls through. */
+export function parseApiError(
+  errorData: ApiError,
+  status: number,
+): ApiClientError {
+  return new ApiClientError(
+    errorData.message ?? errorData.error,
+    status,
+    errorData.code ?? errorData.error,
+    errorData.details,
+  );
+}
+
 export class ApiClient {
   private readonly apiKey: string;
   private readonly baseUrl: string;
@@ -304,12 +321,7 @@ export class ApiClient {
         }
       }
 
-      throw new ApiClientError(
-        errorData.error,
-        response.status,
-        errorData.code,
-        errorData.details,
-      );
+      throw parseApiError(errorData, response.status);
     }
 
     if (!isJson) {
@@ -605,7 +617,7 @@ export class ApiClient {
         },
       ],
       options: {
-        deduplicate: true,
+        deduplicate: input.deduplicate ?? true,
         chunk_large_content: true,
       },
     });

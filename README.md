@@ -23,9 +23,9 @@ ContextForge MCP is an open-source MCP server that connects your AI coding assis
 
 ### 1. Install
 
-```bash
-npm install -g contextforge-mcp
-```
+No install step needed — the setup below runs the server via `npx -y contextforge-mcp`, which fetches it on demand and keeps it up to date.
+
+> Prefer a global install for slightly faster cold starts? `npm install -g contextforge-mcp` is optional; if you do it, you can drop the `npx -y` prefix from the commands below.
 
 ### 2. Get your API key
 
@@ -44,7 +44,8 @@ Edit `~/Library/Application Support/Claude/claude_desktop_config.json`:
 {
   "mcpServers": {
     "contextforge": {
-      "command": "contextforge-mcp",
+      "command": "npx",
+      "args": ["-y", "contextforge-mcp"],
       "env": {
         "CONTEXTFORGE_API_KEY": "your-api-key-here"
       }
@@ -58,9 +59,9 @@ Restart Claude Desktop.
 #### Claude Code (CLI)
 
 ```bash
-claude mcp add contextforge \
+claude mcp add contextforge -s user \
   -e CONTEXTFORGE_API_KEY=your-api-key-here \
-  -- contextforge-mcp
+  -- npx -y contextforge-mcp
 ```
 
 Restart Claude Code and run `/mcp` to verify it's connected.
@@ -74,7 +75,7 @@ Add to your Cursor MCP settings:
   "mcpServers": {
     "contextforge": {
       "command": "npx",
-      "args": ["contextforge-mcp"],
+      "args": ["-y", "contextforge-mcp"],
       "env": {
         "CONTEXTFORGE_API_KEY": "your-api-key-here"
       }
@@ -92,7 +93,7 @@ Add to your Copilot MCP config:
   "servers": {
     "contextforge": {
       "command": "npx",
-      "args": ["contextforge-mcp"],
+      "args": ["-y", "contextforge-mcp"],
       "env": {
         "CONTEXTFORGE_API_KEY": "your-api-key-here"
       }

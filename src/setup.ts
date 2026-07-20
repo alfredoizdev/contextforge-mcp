@@ -5,6 +5,7 @@ import { execSync, spawn } from 'child_process';
 import { existsSync, readFileSync } from 'fs';
 import { homedir } from 'os';
 import { join } from 'path';
+import { validateKey } from './validate-key.js';
 
 // ============ Colors ============
 const colors = {
@@ -226,6 +227,22 @@ async function runSetup() {
     process.exit(1);
   }
 
+  // Validate the key against the backend before writing any config, so a bad
+  // key is caught now instead of silently failing every tool call later.
+  print('');
+  printDim('Verifying your API key…');
+  const keyCheck = await validateKey(apiKey);
+  if (!keyCheck.ok && keyCheck.reason === 'invalid') {
+    print('');
+    printError('That API key was rejected by ContextForge.');
+    printDim('Create a fresh key at https://contextforge.dev/dashboard/api-keys and run npx contextforge-setup again.');
+    rl.close();
+    process.exit(1);
+  }
+  if (!keyCheck.ok) {
+    printDim('Could not reach ContextForge to verify the key (network). Continuing; run `npx contextforge-setup --verify` later.');
+  }
+
   print('');
   printDim('Configuring ContextForge MCP...');
   print('');
@@ -242,7 +259,7 @@ async function runSetup() {
       }
 
       // Run claude mcp add command
-      const command = `claude mcp add contextforge -s user -e CONTEXTFORGE_API_KEY=${apiKey} -- contextforge-mcp`;
+      const command = `claude mcp add contextforge -s user -e CONTEXTFORGE_API_KEY=${apiKey} -- npx -y contextforge-mcp`;
 
       execSync(command, { stdio: 'inherit' });
 
@@ -278,7 +295,7 @@ async function runSetup() {
             } catch {
               // Not configured yet — nothing to remove.
             }
-            const retryCommand = `claude mcp add contextforge -s user -e CONTEXTFORGE_API_KEY=${newApiKey} -- contextforge-mcp`;
+            const retryCommand = `claude mcp add contextforge -s user -e CONTEXTFORGE_API_KEY=${newApiKey} -- npx -y contextforge-mcp`;
             execSync(retryCommand, { stdio: 'inherit' });
             print('');
             print('─'.repeat(60));
@@ -344,7 +361,7 @@ function printManualInstructions(apiKey: string) {
   print(`First install Claude CLI, then run:`);
   print('');
   printDim(`  claude mcp remove contextforge   # skip if not yet configured`);
-  printDim(`  claude mcp add contextforge -s user -e CONTEXTFORGE_API_KEY=${apiKey} -- contextforge-mcp`);
+  printDim(`  claude mcp add contextforge -s user -e CONTEXTFORGE_API_KEY=${apiKey} -- npx -y contextforge-mcp`);
   print('');
   print(`${colors.cyan}Option 2: Edit config manually${colors.reset}`);
   print(`Add to your claude_desktop_config.json:`);
@@ -353,7 +370,8 @@ function printManualInstructions(apiKey: string) {
   const configSnippet = {
     mcpServers: {
       contextforge: {
-        command: 'contextforge-mcp',
+        command: 'npx',
+        args: ['-y', 'contextforge-mcp'],
         env: {
           CONTEXTFORGE_API_KEY: apiKey
         }

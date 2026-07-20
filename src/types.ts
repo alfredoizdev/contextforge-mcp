@@ -48,6 +48,7 @@ export type Config = z.infer<typeof ConfigSchema>;
 
 export interface ApiError {
   error: string;
+  message?: string;
   code?: string;
   details?: Record<string, unknown>;
 }
@@ -164,6 +165,7 @@ export const IngestInputSchema = z.object({
   source_uri: z.string().optional(),
   tags: z.preprocess(parseArrayInput, z.array(z.string()).default([])),
   category: z.string().optional(),
+  deduplicate: z.boolean().optional(),
   space_id: z.string().optional(), // Accepts UUID or space name (resolved before API call)
 });
 
@@ -312,6 +314,7 @@ export interface IngestResponse {
     id: string;
     status: "created" | "duplicate" | "error";
     error?: string;
+    embedded?: boolean;
   }>;
   tokens_used: number;
 }

@@ -61,6 +61,8 @@ import { appendFileSync } from "fs";
 import { createRequire } from "module";
 import { basename } from "path";
 import { checkForUpdates, getUpdateNotice } from "./update-checker.js";
+import { formatIngestResult } from "./format-ingest.js";
+import { validateKey } from "./validate-key.js";
 import { runInitCLI } from "./init.js";
 import { checkInitHint, consumeInitHint } from "./init-hint.js";
 import { SessionPresence } from "./session-presence.js";
@@ -305,7 +307,7 @@ const TOOLS = [
   {
     name: "memory_ingest",
     description:
-      "**Save important context to persistent memory — be proactive.** Call this WHENEVER you learn information that would be valuable in a future conversation: project decisions ('we chose Postgres because X'), architectural choices, user preferences, debugging insights, recurring patterns, deadlines, stakeholder context, or any 'remember this' / 'save this' / 'note that' style request from the user. Heuristic: if you would be sad to lose this fact when the conversation ends, ingest it. Better to over-save than to under-save — the memory_query semantic search will surface what's relevant later. Always pass meaningful `title` and `tags` so the item is discoverable.",
+      "**Save important context to persistent memory — be proactive.** Call this WHENEVER you learn information that would be valuable in a future conversation: project decisions ('we chose Postgres because X'), architectural choices, user preferences, debugging insights, recurring patterns, deadlines, stakeholder context, or any 'remember this' / 'save this' / 'note that' style request from the user. Heuristic: if you would be sad to lose this fact when the conversation ends, ingest it. Better to over-save than to under-save — the memory_query semantic search will surface what's relevant later. Always pass meaningful `title` and `tags` so the item is discoverable. Set `deduplicate:false` to save even if identical content already exists.",
     annotations: {
       title: "Save to Memory",
       readOnlyHint: false,
@@ -345,6 +347,11 @@ const TOOLS = [
         space_id: {
           type: "string",
           description: "Space UUID (uses default if not specified)",
+        },
+        deduplicate: {
+          type: "boolean",
+          description:
+            "Skip saving if identical content already exists (default: true). Set to false to force a copy even when a duplicate is detected.",
         },
       },
       required: ["content"],
@@ -2118,6 +2125,19 @@ async function main() {
   const config = loadConfig();
   const apiClient = new ApiClient(config);
 
+  // Best-effort: warn on stderr if the key is already rejected, so a bad key
+  // is visible at startup instead of "connected" then every tool failing.
+  // Never blocks or delays the server (stdio stays clean).
+  validateKey(config.apiKey)
+    .then((r) => {
+      if (!r.ok && r.reason === "invalid") {
+        console.error(
+          `${colors.red}⚠ ContextForge: your API key was rejected. Memory tools will fail until you fix it — create a new key at https://contextforge.dev/dashboard/api-keys${colors.reset}`,
+        );
+      }
+    })
+    .catch(() => {});
+
   // Live session presence: one MCP process == one Claude Code session.
   // Registration is lazy (first tool call); heartbeat + exit hooks are
   // automatic. All of it is best-effort — never blocks a tool.
@@ -2229,25 +2249,11 @@ async function main() {
             input.title ||
             input.content.slice(0, 50) +
               (input.content.length > 50 ? "..." : "");
-          const itemId = result.items?.[0]?.id;
           return {
             content: [
               {
                 type: "text" as const,
-                text: formatResponse({
-                  message:
-                    result.created > 0
-                      ? `📥 Saved "${itemTitle}" to memory`
-                      : `⏭️ Item already exists in memory (skipped duplicate)`,
-                  hint: "Use memory_query to search your saved knowledge",
-                  details:
-                    result.created > 0
-                      ? {
-                          id: itemId,
-                          title: itemTitle,
-                        }
-                      : undefined,
-                }),
+                text: formatResponse(formatIngestResult(result, itemTitle)),
               },
             ],
           };
@@ -3297,11 +3303,19 @@ async function main() {
                 type: "text" as const,
                 text: JSON.stringify(
                   {
-                    success: true,
+                    success: result.created > 0 || result.duplicates_skipped > 0,
                     created: result.created,
                     duplicates_skipped: result.duplicates_skipped,
                     items: result.items,
-                    message: `Successfully ingested ${result.created} items`,
+                    message:
+                      result.created > 0
+                        ? `Ingested ${result.created} item(s); ${result.duplicates_skipped} duplicate(s)` +
+                          (result.items.filter((i) => i.status === "error").length
+                            ? `, ${result.items.filter((i) => i.status === "error").length} error(s)`
+                            : "")
+                        : result.items.some((i) => i.status === "error")
+                          ? `No items saved — ${result.items.filter((i) => i.status === "error").length} error(s). First: ${result.items.find((i) => i.status === "error")?.error ?? "unknown"}`
+                          : `No new items (${result.duplicates_skipped} duplicate(s))`,
                   },
                   null,
                   2,
