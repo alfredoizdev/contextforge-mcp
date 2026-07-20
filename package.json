@@ -1,6 +1,6 @@
 {
   "name": "contextforge-mcp",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "mcpName": "io.github.alfredoizdev/contextforge-mcp",
   "description": "Persistent memory MCP server for Claude Code, Cursor, and GitHub Copilot. Give your AI assistants long-term memory via the Model Context Protocol.",
   "type": "module",

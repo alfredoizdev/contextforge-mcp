@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.2
+
+- `init` now writes a third section, **Startup Context**, so Claude Code and Cursor load a short ContextForge project summary (overview, open tasks, live sessions) at the start of every conversation.
+- Existing users are nudged once to re-run `npx contextforge-mcp init` to pick up the new section; re-running only appends what is missing.
+
 ## 0.4.1
 
 Onboarding & reliability fixes so new users get a working, honest experience.
