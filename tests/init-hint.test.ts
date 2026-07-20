@@ -1,15 +1,27 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtempSync, rmSync, writeFileSync, readFileSync } from "fs";
+import {
+  mkdtempSync,
+  rmSync,
+  writeFileSync,
+  readFileSync,
+  mkdirSync,
+} from "fs";
 import { tmpdir } from "os";
-import { join } from "path";
+import { join, dirname } from "path";
 import {
   computeInitHint,
   markInitHintShown,
   checkInitHint,
   consumeInitHint,
   INIT_HINT_TEXT,
+  HINT_VERSION,
 } from "../src/init-hint.js";
-import { PRESENCE_MARKER } from "../src/init.js";
+import { STARTUP_MARKER } from "../src/init.js";
+
+function cacheFileEnsuringDir(p: string): string {
+  mkdirSync(dirname(p), { recursive: true });
+  return p;
+}
 
 describe("init hint", () => {
   let tmp: string;
@@ -33,8 +45,8 @@ describe("init hint", () => {
     expect(computeInitHint(tmp, cacheFile)).toBe(INIT_HINT_TEXT);
   });
 
-  it("does not hint when the presence marker is present", () => {
-    writeFileSync(join(tmp, "CLAUDE.md"), PRESENCE_MARKER + "\nrules\n");
+  it("does not hint when the startup marker is present", () => {
+    writeFileSync(join(tmp, "CLAUDE.md"), STARTUP_MARKER + "\nrules\n");
     expect(computeInitHint(tmp, cacheFile)).toBeNull();
   });
 
@@ -67,8 +79,8 @@ describe("init hint", () => {
     expect(cache.shownFor).toContain(tmp);
   });
 
-  it("consumeInitHint returns empty string when marker was present", () => {
-    writeFileSync(join(tmp, "CLAUDE.md"), PRESENCE_MARKER + "\n");
+  it("consumeInitHint returns empty string when startup marker present", () => {
+    writeFileSync(join(tmp, "CLAUDE.md"), STARTUP_MARKER + "\n");
     checkInitHint(tmp, cacheFile);
     expect(consumeInitHint(cacheFile)).toBe("");
   });
@@ -81,5 +93,23 @@ describe("init hint", () => {
     } finally {
       delete process.env.CONTEXTFORGE_DISABLE_INIT_HINT;
     }
+  });
+
+  it("re-nudges when the cache is from an older hint version", () => {
+    // Existing user: already dismissed the hint under an older version.
+    writeFileSync(join(tmp, "CLAUDE.md"), "# project\n");
+    writeFileSync(
+      cacheFileEnsuringDir(cacheFile),
+      JSON.stringify({ version: 1, shownFor: [tmp] }),
+    );
+    expect(computeInitHint(tmp, cacheFile)).toBe(INIT_HINT_TEXT);
+  });
+
+  it("re-nudge fires only once: after shown, the current-version cache silences it", () => {
+    writeFileSync(join(tmp, "CLAUDE.md"), "# project\n");
+    markInitHintShown(tmp, cacheFile); // writes version = HINT_VERSION
+    expect(computeInitHint(tmp, cacheFile)).toBeNull();
+    const cache = JSON.parse(readFileSync(cacheFile, "utf-8"));
+    expect(cache.version).toBe(HINT_VERSION);
   });
 });
