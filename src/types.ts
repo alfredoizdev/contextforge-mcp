@@ -167,6 +167,7 @@ export const IngestInputSchema = z.object({
   category: z.string().optional(),
   deduplicate: z.boolean().optional(),
   space_id: z.string().optional(), // Accepts UUID or space name (resolved before API call)
+  related_paths: z.preprocess(parseArrayInput, z.array(z.string()).default([])), // Files/dirs this memory is about (staleness detection)
 });
 
 export type IngestInput = z.infer<typeof IngestInputSchema>;

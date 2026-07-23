@@ -2247,10 +2247,7 @@ async function main() {
             }
           }
 
-          const gitCtx = buildGitContext(
-            currentGit(),
-            (args?.related_paths as string[]) ?? [],
-          );
+          const gitCtx = buildGitContext(currentGit(), input.related_paths);
           const result = await apiClient.ingest({
             ...input,
             git_context: gitCtx,

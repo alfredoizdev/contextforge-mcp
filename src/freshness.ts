@@ -33,8 +33,8 @@ export interface GitContext {
 }
 
 export function buildGitContext(
-  git: { repo: string; sha: string } | null,
+  gitInfo: { repo: string; sha: string } | null,
   relatedPaths: string[],
 ): GitContext | null {
-  return git ? { ...git, related_paths: relatedPaths ?? [] } : null;
+  return gitInfo ? { ...gitInfo, related_paths: relatedPaths ?? [] } : null;
 }
