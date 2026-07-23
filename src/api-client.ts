@@ -1,5 +1,6 @@
 import { readFileSync, writeFileSync, existsSync, unlinkSync } from "fs";
 import { join } from "path";
+import type { GitContext } from "./freshness.js";
 import type {
   Config,
   ApiError,
@@ -601,7 +602,9 @@ export class ApiClient {
 
   // ============ Ingest ============
 
-  async ingest(input: IngestInput): Promise<IngestResponse> {
+  async ingest(
+    input: IngestInput & { git_context?: GitContext | null },
+  ): Promise<IngestResponse> {
     const spaceId = this.getSpaceId(input.space_id);
 
     return this.request<IngestResponse>("POST", "/functions/v1/ingest", {
@@ -614,6 +617,7 @@ export class ApiClient {
           source_uri: input.source_uri,
           tags: input.tags,
           category: input.category,
+          git_context: input.git_context ?? null,
         },
       ],
       options: {
@@ -810,6 +814,35 @@ export class ApiClient {
       "GET",
       `/functions/v1/git-history?${params.toString()}`,
     );
+  }
+
+  // ============ Freshness ============
+
+  async listFreshnessCandidates(spaceId?: string): Promise<{
+    candidates: Array<{
+      id: string;
+      title: string;
+      content: string;
+      last_confirmed_at: string | null;
+      git: { repo: string; sha: string; related_paths: string[] };
+    }>;
+  }> {
+    return this.request("POST", "/functions/v1/freshness", {
+      action: "list",
+      space_id: spaceId,
+    });
+  }
+
+  async freshnessAction(
+    action: "confirm" | "correct" | "forget",
+    id: string,
+    extra?: { content?: string; git_context?: unknown },
+  ): Promise<{ ok?: boolean; error?: string }> {
+    return this.request("POST", "/functions/v1/freshness", {
+      action,
+      id,
+      ...extra,
+    });
   }
 
   // ============ Snapshots ============

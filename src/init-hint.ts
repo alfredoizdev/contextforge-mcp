@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "fs";
 import { dirname, join } from "path";
 import { homedir } from "os";
-import { PRESENCE_MARKER } from "./init.js";
+import { STARTUP_MARKER } from "./init.js";
 
 const DEFAULT_CACHE_FILE = join(
   homedir(),
@@ -10,20 +10,27 @@ const DEFAULT_CACHE_FILE = join(
   "init-hint.json",
 );
 
+/** Bump when a new init section ships, to re-nudge users who dismissed the old hint. */
+export const HINT_VERSION = 3;
+
 /** One-time tip appended to the first tool response of a session. */
 export const INIT_HINT_TEXT =
-  "\n\n💡 New: run `npx contextforge-mcp init` in this project to add Session Presence coordination rules to CLAUDE.md — your parallel sessions will then check for each other automatically. (Shown once per project.)";
+  "\n\n💡 New: run `npx contextforge-mcp init` in this project to add the Startup Context rule to CLAUDE.md — Claude will load your project overview, open tasks, and live sessions automatically at the start of each conversation. (Shown once per project.)";
 
 interface HintCache {
+  version?: number;
   shownFor: string[];
 }
 
 function readCache(cacheFile: string): HintCache {
   try {
     const parsed = JSON.parse(readFileSync(cacheFile, "utf-8")) as HintCache;
-    return Array.isArray(parsed?.shownFor) ? parsed : { shownFor: [] };
+    return {
+      version: typeof parsed?.version === "number" ? parsed.version : 0,
+      shownFor: Array.isArray(parsed?.shownFor) ? parsed.shownFor : [],
+    };
   } catch {
-    return { shownFor: [] };
+    return { version: 0, shownFor: [] };
   }
 }
 
@@ -34,17 +41,23 @@ export function markInitHintShown(
 ): void {
   try {
     const cache = readCache(cacheFile);
-    if (!cache.shownFor.includes(cwd)) cache.shownFor.push(cwd);
+    const shownFor = cache.version === HINT_VERSION ? cache.shownFor : [];
+    if (!shownFor.includes(cwd)) shownFor.push(cwd);
     mkdirSync(dirname(cacheFile), { recursive: true });
-    writeFileSync(cacheFile, JSON.stringify(cache));
+    writeFileSync(
+      cacheFile,
+      JSON.stringify({ version: HINT_VERSION, shownFor }),
+    );
   } catch {
     // Silent — must never crash the MCP server.
   }
 }
 
 /**
- * Returns the hint if this project's CLAUDE.md lacks the presence marker
- * AND the hint has not been shown for this project before; otherwise null.
+ * Returns the hint if this project's CLAUDE.md lacks the startup marker
+ * AND the hint has not been shown for this project under the current hint
+ * version before; otherwise null. A cache written under an older hint
+ * version re-nudges once, since it predates whatever shipped in the bump.
  * All failures return null (never crash, never slow the server).
  */
 export function computeInitHint(
@@ -58,11 +71,15 @@ export function computeInitHint(
     const claudeMd = join(cwd, "CLAUDE.md");
     if (
       existsSync(claudeMd) &&
-      readFileSync(claudeMd, "utf-8").includes(PRESENCE_MARKER)
+      readFileSync(claudeMd, "utf-8").includes(STARTUP_MARKER)
     ) {
       return null;
     }
-    if (readCache(cacheFile).shownFor.includes(cwd)) return null;
+    const cache = readCache(cacheFile);
+    // A cache from an older hint version has stale per-project flags — re-nudge once.
+    const shownForThisVersion =
+      cache.version === HINT_VERSION ? cache.shownFor : [];
+    if (shownForThisVersion.includes(cwd)) return null;
     return INIT_HINT_TEXT;
   } catch {
     return null;

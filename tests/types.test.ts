@@ -100,6 +100,35 @@ describe('IngestInputSchema', () => {
     const result = IngestInputSchema.safeParse(input);
     expect(result.success).toBe(false);
   });
+
+  it('should default related_paths to an empty array when omitted', () => {
+    const input = {
+      content: 'Some content',
+    };
+
+    const result = IngestInputSchema.safeParse(input);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.related_paths).toEqual([]);
+    }
+  });
+
+  it('should coerce a JSON-encoded string related_paths into a real string[]', () => {
+    // Some MCP clients send arrays as JSON-encoded strings instead of real arrays,
+    // exactly like the `tags` field above — related_paths must be coerced the same way
+    // before it reaches buildGitContext, or git_context.related_paths ends up a string.
+    const input = {
+      content: 'Some content',
+      related_paths: '["src/api.ts", "src/auth"]',
+    };
+
+    const result = IngestInputSchema.safeParse(input);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(Array.isArray(result.data.related_paths)).toBe(true);
+      expect(result.data.related_paths).toEqual(['src/api.ts', 'src/auth']);
+    }
+  });
 });
 
 describe('QueryInputSchema', () => {

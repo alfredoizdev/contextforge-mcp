@@ -167,6 +167,7 @@ export const IngestInputSchema = z.object({
   category: z.string().optional(),
   deduplicate: z.boolean().optional(),
   space_id: z.string().optional(), // Accepts UUID or space name (resolved before API call)
+  related_paths: z.preprocess(parseArrayInput, z.array(z.string()).default([])), // Files/dirs this memory is about (staleness detection)
 });
 
 export type IngestInput = z.infer<typeof IngestInputSchema>;
@@ -268,6 +269,28 @@ export const DeleteInputSchema = z
   });
 
 export type DeleteInput = z.infer<typeof DeleteInputSchema>;
+
+// ============ Freshness Input Schemas ============
+
+export const MemoryConfirmInputSchema = z.object({
+  id: z.string().uuid(),
+});
+
+export type MemoryConfirmInput = z.infer<typeof MemoryConfirmInputSchema>;
+
+export const MemoryForgetInputSchema = z.object({
+  id: z.string().uuid(),
+});
+
+export type MemoryForgetInput = z.infer<typeof MemoryForgetInputSchema>;
+
+export const MemoryCorrectInputSchema = z.object({
+  id: z.string().uuid(),
+  content: z.string().min(1, "Content is required"),
+  related_paths: z.preprocess(parseArrayInput, z.array(z.string()).default([])), // Files/dirs this memory is about (staleness detection)
+});
+
+export type MemoryCorrectInput = z.infer<typeof MemoryCorrectInputSchema>;
 
 // ============ API Response Types ============
 

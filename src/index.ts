@@ -22,6 +22,9 @@ import {
   RelateInputSchema,
   ListRelationshipsInputSchema,
   DeleteInputSchema,
+  MemoryConfirmInputSchema,
+  MemoryForgetInputSchema,
+  MemoryCorrectInputSchema,
   GitConnectInputSchema,
   GitActivateInputSchema,
   GitDisconnectInputSchema,
@@ -66,6 +69,12 @@ import { validateKey } from "./validate-key.js";
 import { runInitCLI } from "./init.js";
 import { checkInitHint, consumeInitHint } from "./init-hint.js";
 import { SessionPresence } from "./session-presence.js";
+import { currentGit, buildGitContext, changedSince } from "./freshness.js";
+import { selectStale } from "./freshness-select.js";
+import {
+  resolveLinkedProjectSpaceId,
+  resolveLinkedProjectSpaceIdReadOnly,
+} from "./resolve-space.js";
 
 const require = createRequire(import.meta.url);
 const pkg = require("../package.json");
@@ -174,6 +183,10 @@ function logTool(toolName: string, details?: string) {
     memory_link_project: "🔗",
     memory_unlink_project: "🔓",
     memory_current_project: "📍",
+    memory_check_freshness: "🔍",
+    memory_confirm: "✅",
+    memory_correct: "✏️",
+    memory_forget: "🗑️",
     tasks_list: "📋",
     tasks_start: "▶️",
     tasks_resolve: "✅",
@@ -352,6 +365,12 @@ const TOOLS = [
           type: "boolean",
           description:
             "Skip saving if identical content already exists (default: true). Set to false to force a copy even when a duplicate is detected.",
+        },
+        related_paths: {
+          type: "array",
+          items: { type: "string" },
+          description:
+            'Files/dirs this memory is about (e.g. ["src/api.ts"]). Enables staleness detection when that code changes.',
         },
       },
       required: ["content"],
@@ -1363,6 +1382,104 @@ const TOOLS = [
       required: [],
     },
   },
+  {
+    name: "memory_check_freshness",
+    description:
+      "Check whether memories linked to git-tracked code (via `related_paths` on memory_ingest) are stale because the underlying code changed since they were saved. Compares each candidate's saved commit SHA against the current HEAD with a local `git diff` — no data leaves your machine for the diff itself. Returns up to 3 memories whose related files changed, so you can review and refresh them. Call this periodically or when you suspect saved context might be out of date.",
+    annotations: {
+      title: "Check Memory Freshness",
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        space_id: {
+          type: "string",
+          description: "Space UUID (uses default if not specified)",
+        },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "memory_confirm",
+    description:
+      "Confirm that a memory flagged by memory_check_freshness is still accurate, even though its related code changed. Updates the memory's confirmed timestamp so it won't be flagged again until the code changes further.",
+    annotations: {
+      title: "Confirm Memory",
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        id: {
+          type: "string",
+          description: "UUID of the memory item to confirm as still accurate",
+        },
+      },
+      required: ["id"],
+    },
+  },
+  {
+    name: "memory_correct",
+    description:
+      "Update a memory flagged by memory_check_freshness with corrected content after its related code changed. Replaces the stored content and refreshes the git context (current commit SHA) so future freshness checks compare against the new baseline.",
+    annotations: {
+      title: "Correct Memory",
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+      openWorldHint: false,
+    },
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        id: {
+          type: "string",
+          description: "UUID of the memory item to correct",
+        },
+        content: {
+          type: "string",
+          description: "The corrected, up-to-date content",
+        },
+        related_paths: {
+          type: "array",
+          items: { type: "string" },
+          description:
+            'Files/dirs this memory is about (e.g. ["src/api.ts"]). Refreshes staleness tracking for future checks.',
+        },
+      },
+      required: ["id", "content"],
+    },
+  },
+  {
+    name: "memory_forget",
+    description:
+      "Delete a memory flagged by memory_check_freshness that is no longer relevant or accurate. Use this instead of memory_delete when acting directly on a freshness check result.",
+    annotations: {
+      title: "Forget Memory",
+      readOnlyHint: false,
+      destructiveHint: true,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        id: {
+          type: "string",
+          description: "UUID of the memory item to forget (delete)",
+        },
+      },
+      required: ["id"],
+    },
+  },
   // ============ Tasks (Task Management) ============
   {
     name: "tasks_list",
@@ -2217,30 +2334,25 @@ async function main() {
               input.space_id = resolvedSpaceId;
             }
           } else {
-            // If no space_id provided, use linked project's default space
+            // If no space_id provided, use linked project's default space.
+            // memory_check_freshness relies on this SAME resolution (via
+            // resolveLinkedProjectSpaceId) so it looks at the space this
+            // ingest actually wrote into.
             const linkedConfig = readProjectLinkConfig();
-            if (linkedConfig) {
-              // Get spaces from linked project
-              const spaces = await apiClient.listSpaces(
-                linkedConfig.project_id,
-                "regular",
-              );
-              if (spaces.length > 0) {
-                // Use first available space in linked project
-                input.space_id = spaces[0].id;
-              } else {
-                // Create a default space in linked project
-                const defaultSpace = await apiClient.createSpace({
-                  name: "Default",
-                  description: "Default space for the project",
-                  project_id: linkedConfig.project_id,
-                });
-                input.space_id = defaultSpace.id;
-              }
+            const resolved = await resolveLinkedProjectSpaceId(
+              apiClient,
+              linkedConfig,
+            );
+            if (resolved) {
+              input.space_id = resolved;
             }
           }
 
-          const result = await apiClient.ingest(input);
+          const gitCtx = buildGitContext(currentGit(), input.related_paths);
+          const result = await apiClient.ingest({
+            ...input,
+            git_context: gitCtx,
+          });
           const elapsed = Date.now() - startTime;
 
           logSuccess(`Saved ${result.created} item(s) in ${elapsed}ms`);
@@ -3505,6 +3617,201 @@ async function main() {
                   null,
                   2,
                 ),
+              },
+            ],
+          };
+        }
+
+        case "memory_check_freshness": {
+          let spaceId =
+            typeof args === "object" && args !== null && "space_id" in args
+              ? String(args.space_id)
+              : undefined;
+
+          if (!spaceId) {
+            // No explicit space_id: resolve it the SAME way memory_ingest
+            // does — otherwise linked-project users check a different space
+            // than the one they saved into (the backend falls back to the
+            // org's oldest space when space_id is undefined) and always see
+            // zero candidates. BUT this check is read-only and runs
+            // automatically at every session start, so it must use the
+            // read-only resolver, which never calls createSpace (that POST
+            // enforces the org's space quota and notifies collaborators —
+            // unacceptable side effects for a passive check).
+            const linkedConfig = readProjectLinkConfig();
+            const resolved = await resolveLinkedProjectSpaceIdReadOnly(
+              apiClient,
+              linkedConfig,
+            );
+
+            if (resolved === null && linkedConfig) {
+              // A project is linked but has no space yet, so it can't have
+              // any memories to check. Short-circuit without touching the
+              // backend or creating anything.
+              logTool(name, "no space yet for linked project — nothing to check");
+              logSuccess("Found 0 stale memory(ies) of 0 candidate(s)");
+              return {
+                content: [
+                  {
+                    type: "text" as const,
+                    text: JSON.stringify(
+                      {
+                        flagged: [],
+                        checked: 0,
+                        message:
+                          "🔍 No stale memories found — related code hasn't changed",
+                      },
+                      null,
+                      2,
+                    ),
+                  },
+                ],
+              };
+            }
+
+            // No project linked: keep passing undefined so the backend
+            // falls back to its existing org-default behavior (unchanged).
+            spaceId = resolved ?? undefined;
+          }
+          logTool(name, spaceId);
+
+          const cands = await apiClient.listFreshnessCandidates(spaceId);
+
+          // Each candidate stored its OWN git.sha at ingest time, so it must
+          // be diffed against `git diff <its sha>..HEAD`, not against some
+          // other candidate's diff from the same repo. Compute the changed
+          // file list once per DISTINCT sha (bounded by the number of
+          // distinct saved commits among the candidates), keyed by sha.
+          const changedBySha: Record<string, string[]> = {};
+          const cur = currentGit();
+          for (const c of cands.candidates) {
+            if (
+              cur &&
+              c.git.repo === cur.repo &&
+              !(c.git.sha in changedBySha)
+            ) {
+              changedBySha[c.git.sha] = changedSince(c.git.sha);
+            }
+          }
+          const flagged = selectStale(cands.candidates, changedBySha, {
+            max: 3,
+          });
+          const elapsed = Date.now() - startTime;
+
+          logSuccess(
+            `Found ${flagged.length} stale memory(ies) of ${cands.candidates.length} candidate(s) in ${elapsed}ms`,
+          );
+
+          const summaryLines =
+            flagged.length > 0
+              ? flagged.map(
+                  (m) => `- [${m.id}] "${m.title}" — changed: ${m.changed.join(", ")}`,
+                )
+              : [];
+
+          return {
+            content: [
+              {
+                type: "text" as const,
+                text: JSON.stringify(
+                  {
+                    flagged: flagged.map((m) => ({
+                      id: m.id,
+                      title: m.title,
+                      changed: m.changed,
+                    })),
+                    checked: cands.candidates.length,
+                    message:
+                      flagged.length > 0
+                        ? `🔍 ${flagged.length} memory(ies) may be stale — related code changed:\n${summaryLines.join("\n")}`
+                        : "🔍 No stale memories found — related code hasn't changed",
+                    hint:
+                      flagged.length > 0
+                        ? "Review these memories and re-ingest with updated content if needed"
+                        : undefined,
+                  },
+                  null,
+                  2,
+                ),
+              },
+            ],
+          };
+        }
+
+        case "memory_confirm": {
+          const input = MemoryConfirmInputSchema.parse(args);
+          logTool(name, input.id);
+
+          const result = await apiClient.freshnessAction("confirm", input.id);
+          const elapsed = Date.now() - startTime;
+
+          if (result.error) {
+            logError(`Failed to confirm memory ${input.id}: ${result.error}`);
+          } else {
+            logSuccess(`Confirmed memory ${input.id} (${elapsed}ms)`);
+          }
+
+          return {
+            content: [
+              {
+                type: "text" as const,
+                text: result.error
+                  ? `❌ Failed to confirm memory ${input.id}: ${result.error}`
+                  : `✅ Confirmed memory ${input.id} as still accurate.`,
+              },
+            ],
+          };
+        }
+
+        case "memory_correct": {
+          const input = MemoryCorrectInputSchema.parse(args);
+          logTool(name, input.id);
+
+          const gitCtx = buildGitContext(currentGit(), input.related_paths);
+          const result = await apiClient.freshnessAction("correct", input.id, {
+            content: input.content,
+            git_context: gitCtx,
+          });
+          const elapsed = Date.now() - startTime;
+
+          if (result.error) {
+            logError(`Failed to correct memory ${input.id}: ${result.error}`);
+          } else {
+            logSuccess(`Corrected memory ${input.id} (${elapsed}ms)`);
+          }
+
+          return {
+            content: [
+              {
+                type: "text" as const,
+                text: result.error
+                  ? `❌ Failed to correct memory ${input.id}: ${result.error}`
+                  : `✏️ Updated memory ${input.id} with corrected content.`,
+              },
+            ],
+          };
+        }
+
+        case "memory_forget": {
+          const input = MemoryForgetInputSchema.parse(args);
+          logTool(name, input.id);
+
+          const result = await apiClient.freshnessAction("forget", input.id);
+          const elapsed = Date.now() - startTime;
+
+          if (result.error) {
+            logError(`Failed to forget memory ${input.id}: ${result.error}`);
+          } else {
+            logSuccess(`Forgot memory ${input.id} (${elapsed}ms)`);
+          }
+
+          return {
+            content: [
+              {
+                type: "text" as const,
+                text: result.error
+                  ? `❌ Failed to forget memory ${input.id}: ${result.error}`
+                  : `🗑️ Forgot memory ${input.id}.`,
               },
             ],
           };
