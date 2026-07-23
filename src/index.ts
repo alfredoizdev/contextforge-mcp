@@ -66,6 +66,7 @@ import { validateKey } from "./validate-key.js";
 import { runInitCLI } from "./init.js";
 import { checkInitHint, consumeInitHint } from "./init-hint.js";
 import { SessionPresence } from "./session-presence.js";
+import { currentGit, buildGitContext } from "./freshness.js";
 
 const require = createRequire(import.meta.url);
 const pkg = require("../package.json");
@@ -352,6 +353,12 @@ const TOOLS = [
           type: "boolean",
           description:
             "Skip saving if identical content already exists (default: true). Set to false to force a copy even when a duplicate is detected.",
+        },
+        related_paths: {
+          type: "array",
+          items: { type: "string" },
+          description:
+            'Files/dirs this memory is about (e.g. ["src/api.ts"]). Enables staleness detection when that code changes.',
         },
       },
       required: ["content"],
@@ -2240,7 +2247,14 @@ async function main() {
             }
           }
 
-          const result = await apiClient.ingest(input);
+          const gitCtx = buildGitContext(
+            currentGit(),
+            (args?.related_paths as string[]) ?? [],
+          );
+          const result = await apiClient.ingest({
+            ...input,
+            git_context: gitCtx,
+          });
           const elapsed = Date.now() - startTime;
 
           logSuccess(`Saved ${result.created} item(s) in ${elapsed}ms`);

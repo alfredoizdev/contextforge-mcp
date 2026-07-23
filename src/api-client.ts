@@ -1,5 +1,6 @@
 import { readFileSync, writeFileSync, existsSync, unlinkSync } from "fs";
 import { join } from "path";
+import type { GitContext } from "./freshness.js";
 import type {
   Config,
   ApiError,
@@ -601,7 +602,9 @@ export class ApiClient {
 
   // ============ Ingest ============
 
-  async ingest(input: IngestInput): Promise<IngestResponse> {
+  async ingest(
+    input: IngestInput & { git_context?: GitContext | null },
+  ): Promise<IngestResponse> {
     const spaceId = this.getSpaceId(input.space_id);
 
     return this.request<IngestResponse>("POST", "/functions/v1/ingest", {
@@ -614,6 +617,7 @@ export class ApiClient {
           source_uri: input.source_uri,
           tags: input.tags,
           category: input.category,
+          git_context: input.git_context ?? null,
         },
       ],
       options: {
