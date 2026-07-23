@@ -14,17 +14,28 @@ export interface SpaceResolutionApi {
   }): Promise<{ id: string }>;
 }
 
+/** Returns the linked project's first "regular" space id, or `null` if it
+ * has none yet. Never creates anything — shared by both the write-capable
+ * and read-only resolvers below. */
+async function findFirstRegularSpace(
+  apiClient: Pick<SpaceResolutionApi, "listSpaces">,
+  projectId: string,
+): Promise<string | null> {
+  const spaces = await apiClient.listSpaces(projectId, "regular");
+  return spaces.length > 0 ? spaces[0].id : null;
+}
+
 /**
  * Resolves the default space_id for a linked project when no explicit
  * space_id was supplied — the first "regular" space in the linked project,
  * creating a "Default" space if none exists yet. Mirrors memory_ingest's
  * fallback behavior exactly.
  *
- * IMPORTANT: memory_check_freshness MUST resolve its space the same way, or
- * it ends up asking the backend about a different space than the one
- * memory_ingest actually wrote into (the freshness backend falls back to
- * the org's oldest space when no space_id is passed at all) — silently
- * returning zero candidates for every linked-project user.
+ * WRITE-CAPABLE: this may call apiClient.createSpace(), which enforces the
+ * org's space quota and notifies collaborators. Only use this for flows
+ * that are actually about to write a memory (memory_ingest). Read-only
+ * flows (memory_check_freshness) MUST use
+ * resolveLinkedProjectSpaceIdReadOnly instead — see its docstring.
  */
 export async function resolveLinkedProjectSpaceId(
   apiClient: SpaceResolutionApi,
@@ -32,10 +43,11 @@ export async function resolveLinkedProjectSpaceId(
 ): Promise<string | undefined> {
   if (!linkedConfig) return undefined;
 
-  const spaces = await apiClient.listSpaces(linkedConfig.project_id, "regular");
-  if (spaces.length > 0) {
-    return spaces[0].id;
-  }
+  const existing = await findFirstRegularSpace(
+    apiClient,
+    linkedConfig.project_id,
+  );
+  if (existing) return existing;
 
   const defaultSpace = await apiClient.createSpace({
     name: "Default",
@@ -43,4 +55,30 @@ export async function resolveLinkedProjectSpaceId(
     project_id: linkedConfig.project_id,
   });
   return defaultSpace.id;
+}
+
+/**
+ * READ-ONLY variant for memory_check_freshness: resolves the linked
+ * project's first "regular" space id the same way memory_ingest does, but
+ * NEVER creates a space. Returns `null` when no project is linked, or when
+ * the linked project has no spaces yet.
+ *
+ * memory_check_freshness is a passive, read-only check that runs
+ * automatically at every session start. It must never trigger
+ * apiClient.createSpace() — that POST enforces the org's space quota (can
+ * 403 "quota_exceeded_spaces") and notifies every project collaborator,
+ * which is unacceptable as a side effect of a background freshness check
+ * for a project that has no memories to check anyway.
+ *
+ * Callers: if this returns `null` AND a project IS linked, there is no
+ * space to check — short-circuit with an empty "no stale memories" result
+ * instead of calling the backend. If no project is linked, `null` here
+ * means "let the backend fall back to its org-default behavior."
+ */
+export async function resolveLinkedProjectSpaceIdReadOnly(
+  apiClient: Pick<SpaceResolutionApi, "listSpaces">,
+  linkedConfig: ProjectLinkConfig | null,
+): Promise<string | null> {
+  if (!linkedConfig) return null;
+  return findFirstRegularSpace(apiClient, linkedConfig.project_id);
 }

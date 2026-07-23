@@ -1,5 +1,8 @@
 import { describe, it, expect, vi } from "vitest";
-import { resolveLinkedProjectSpaceId } from "../src/resolve-space.js";
+import {
+  resolveLinkedProjectSpaceId,
+  resolveLinkedProjectSpaceIdReadOnly,
+} from "../src/resolve-space.js";
 import type { ProjectLinkConfig } from "../src/types.js";
 
 const linkedConfig: ProjectLinkConfig = {
@@ -42,5 +45,38 @@ describe("resolveLinkedProjectSpaceId", () => {
       description: "Default space for the project",
       project_id: "proj-1",
     });
+  });
+});
+
+describe("resolveLinkedProjectSpaceIdReadOnly", () => {
+  it("returns null when no project is linked", async () => {
+    const api = {
+      listSpaces: vi.fn(),
+    };
+    const result = await resolveLinkedProjectSpaceIdReadOnly(api, null);
+    expect(result).toBeNull();
+    expect(api.listSpaces).not.toHaveBeenCalled();
+  });
+
+  it("returns the first regular space in the linked project without creating anything", async () => {
+    const api = {
+      listSpaces: vi.fn().mockResolvedValue([{ id: "space-1" }, { id: "space-2" }]),
+      createSpace: vi.fn(),
+    };
+    const result = await resolveLinkedProjectSpaceIdReadOnly(api, linkedConfig);
+    expect(result).toBe("space-1");
+    expect(api.listSpaces).toHaveBeenCalledWith("proj-1", "regular");
+    expect(api.createSpace).not.toHaveBeenCalled();
+  });
+
+  it("returns null (never creates) when the linked project has no spaces yet", async () => {
+    const api = {
+      listSpaces: vi.fn().mockResolvedValue([]),
+      createSpace: vi.fn(),
+    };
+    const result = await resolveLinkedProjectSpaceIdReadOnly(api, linkedConfig);
+    expect(result).toBeNull();
+    expect(api.listSpaces).toHaveBeenCalledWith("proj-1", "regular");
+    expect(api.createSpace).not.toHaveBeenCalled();
   });
 });

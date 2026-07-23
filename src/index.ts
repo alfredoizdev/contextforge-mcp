@@ -71,7 +71,10 @@ import { checkInitHint, consumeInitHint } from "./init-hint.js";
 import { SessionPresence } from "./session-presence.js";
 import { currentGit, buildGitContext, changedSince } from "./freshness.js";
 import { selectStale } from "./freshness-select.js";
-import { resolveLinkedProjectSpaceId } from "./resolve-space.js";
+import {
+  resolveLinkedProjectSpaceId,
+  resolveLinkedProjectSpaceIdReadOnly,
+} from "./resolve-space.js";
 
 const require = createRequire(import.meta.url);
 const pkg = require("../package.json");
@@ -3627,15 +3630,48 @@ async function main() {
 
           if (!spaceId) {
             // No explicit space_id: resolve it the SAME way memory_ingest
-            // does. Otherwise linked-project users check a different space
+            // does — otherwise linked-project users check a different space
             // than the one they saved into (the backend falls back to the
-            // org's oldest space when space_id is undefined) and always
-            // see zero candidates.
+            // org's oldest space when space_id is undefined) and always see
+            // zero candidates. BUT this check is read-only and runs
+            // automatically at every session start, so it must use the
+            // read-only resolver, which never calls createSpace (that POST
+            // enforces the org's space quota and notifies collaborators —
+            // unacceptable side effects for a passive check).
             const linkedConfig = readProjectLinkConfig();
-            spaceId = await resolveLinkedProjectSpaceId(
+            const resolved = await resolveLinkedProjectSpaceIdReadOnly(
               apiClient,
               linkedConfig,
             );
+
+            if (resolved === null && linkedConfig) {
+              // A project is linked but has no space yet, so it can't have
+              // any memories to check. Short-circuit without touching the
+              // backend or creating anything.
+              logTool(name, "no space yet for linked project — nothing to check");
+              logSuccess("Found 0 stale memory(ies) of 0 candidate(s)");
+              return {
+                content: [
+                  {
+                    type: "text" as const,
+                    text: JSON.stringify(
+                      {
+                        flagged: [],
+                        checked: 0,
+                        message:
+                          "🔍 No stale memories found — related code hasn't changed",
+                      },
+                      null,
+                      2,
+                    ),
+                  },
+                ],
+              };
+            }
+
+            // No project linked: keep passing undefined so the backend
+            // falls back to its existing org-default behavior (unchanged).
+            spaceId = resolved ?? undefined;
           }
           logTool(name, spaceId);
 
