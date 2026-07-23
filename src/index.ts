@@ -71,6 +71,7 @@ import { checkInitHint, consumeInitHint } from "./init-hint.js";
 import { SessionPresence } from "./session-presence.js";
 import { currentGit, buildGitContext, changedSince } from "./freshness.js";
 import { selectStale } from "./freshness-select.js";
+import { resolveLinkedProjectSpaceId } from "./resolve-space.js";
 
 const require = createRequire(import.meta.url);
 const pkg = require("../package.json");
@@ -2330,26 +2331,17 @@ async function main() {
               input.space_id = resolvedSpaceId;
             }
           } else {
-            // If no space_id provided, use linked project's default space
+            // If no space_id provided, use linked project's default space.
+            // memory_check_freshness relies on this SAME resolution (via
+            // resolveLinkedProjectSpaceId) so it looks at the space this
+            // ingest actually wrote into.
             const linkedConfig = readProjectLinkConfig();
-            if (linkedConfig) {
-              // Get spaces from linked project
-              const spaces = await apiClient.listSpaces(
-                linkedConfig.project_id,
-                "regular",
-              );
-              if (spaces.length > 0) {
-                // Use first available space in linked project
-                input.space_id = spaces[0].id;
-              } else {
-                // Create a default space in linked project
-                const defaultSpace = await apiClient.createSpace({
-                  name: "Default",
-                  description: "Default space for the project",
-                  project_id: linkedConfig.project_id,
-                });
-                input.space_id = defaultSpace.id;
-              }
+            const resolved = await resolveLinkedProjectSpaceId(
+              apiClient,
+              linkedConfig,
+            );
+            if (resolved) {
+              input.space_id = resolved;
             }
           }
 
@@ -3628,25 +3620,44 @@ async function main() {
         }
 
         case "memory_check_freshness": {
-          const spaceId =
+          let spaceId =
             typeof args === "object" && args !== null && "space_id" in args
               ? String(args.space_id)
               : undefined;
+
+          if (!spaceId) {
+            // No explicit space_id: resolve it the SAME way memory_ingest
+            // does. Otherwise linked-project users check a different space
+            // than the one they saved into (the backend falls back to the
+            // org's oldest space when space_id is undefined) and always
+            // see zero candidates.
+            const linkedConfig = readProjectLinkConfig();
+            spaceId = await resolveLinkedProjectSpaceId(
+              apiClient,
+              linkedConfig,
+            );
+          }
           logTool(name, spaceId);
 
           const cands = await apiClient.listFreshnessCandidates(spaceId);
-          const changedByRepo: Record<string, string[]> = {};
+
+          // Each candidate stored its OWN git.sha at ingest time, so it must
+          // be diffed against `git diff <its sha>..HEAD`, not against some
+          // other candidate's diff from the same repo. Compute the changed
+          // file list once per DISTINCT sha (bounded by the number of
+          // distinct saved commits among the candidates), keyed by sha.
+          const changedBySha: Record<string, string[]> = {};
           const cur = currentGit();
           for (const c of cands.candidates) {
             if (
               cur &&
               c.git.repo === cur.repo &&
-              !(c.git.repo in changedByRepo)
+              !(c.git.sha in changedBySha)
             ) {
-              changedByRepo[c.git.repo] = changedSince(c.git.sha);
+              changedBySha[c.git.sha] = changedSince(c.git.sha);
             }
           }
-          const flagged = selectStale(cands.candidates, changedByRepo, {
+          const flagged = selectStale(cands.candidates, changedBySha, {
             max: 3,
           });
           const elapsed = Date.now() - startTime;
