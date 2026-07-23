@@ -816,6 +816,23 @@ export class ApiClient {
     );
   }
 
+  // ============ Freshness ============
+
+  async listFreshnessCandidates(spaceId?: string): Promise<{
+    candidates: Array<{
+      id: string;
+      title: string;
+      content: string;
+      last_confirmed_at: string | null;
+      git: { repo: string; sha: string; related_paths: string[] };
+    }>;
+  }> {
+    return this.request("POST", "/functions/v1/freshness", {
+      action: "list",
+      space_id: spaceId,
+    });
+  }
+
   // ============ Snapshots ============
 
   async snapshotCreate(

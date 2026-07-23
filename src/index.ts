@@ -66,7 +66,8 @@ import { validateKey } from "./validate-key.js";
 import { runInitCLI } from "./init.js";
 import { checkInitHint, consumeInitHint } from "./init-hint.js";
 import { SessionPresence } from "./session-presence.js";
-import { currentGit, buildGitContext } from "./freshness.js";
+import { currentGit, buildGitContext, changedSince } from "./freshness.js";
+import { selectStale } from "./freshness-select.js";
 
 const require = createRequire(import.meta.url);
 const pkg = require("../package.json");
@@ -175,6 +176,7 @@ function logTool(toolName: string, details?: string) {
     memory_link_project: "🔗",
     memory_unlink_project: "🔓",
     memory_current_project: "📍",
+    memory_check_freshness: "🔍",
     tasks_list: "📋",
     tasks_start: "▶️",
     tasks_resolve: "✅",
@@ -1367,6 +1369,28 @@ const TOOLS = [
     inputSchema: {
       type: "object" as const,
       properties: {},
+      required: [],
+    },
+  },
+  {
+    name: "memory_check_freshness",
+    description:
+      "Check whether memories linked to git-tracked code (via `related_paths` on memory_ingest) are stale because the underlying code changed since they were saved. Compares each candidate's saved commit SHA against the current HEAD with a local `git diff` — no data leaves your machine for the diff itself. Returns up to 3 memories whose related files changed, so you can review and refresh them. Call this periodically or when you suspect saved context might be out of date.",
+    annotations: {
+      title: "Check Memory Freshness",
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        space_id: {
+          type: "string",
+          description: "Space UUID (uses default if not specified)",
+        },
+      },
       required: [],
     },
   },
@@ -3512,6 +3536,70 @@ async function main() {
                     hint: result.linked
                       ? "Use memory_unlink_project to remove the link"
                       : "Use memory_link_project to link a project",
+                  },
+                  null,
+                  2,
+                ),
+              },
+            ],
+          };
+        }
+
+        case "memory_check_freshness": {
+          const spaceId =
+            typeof args === "object" && args !== null && "space_id" in args
+              ? String(args.space_id)
+              : undefined;
+          logTool(name, spaceId);
+
+          const cands = await apiClient.listFreshnessCandidates(spaceId);
+          const changedByRepo: Record<string, string[]> = {};
+          const cur = currentGit();
+          for (const c of cands.candidates) {
+            if (
+              cur &&
+              c.git.repo === cur.repo &&
+              !(c.git.repo in changedByRepo)
+            ) {
+              changedByRepo[c.git.repo] = changedSince(c.git.sha);
+            }
+          }
+          const flagged = selectStale(cands.candidates, changedByRepo, {
+            max: 3,
+          });
+          const elapsed = Date.now() - startTime;
+
+          logSuccess(
+            `Found ${flagged.length} stale memory(ies) of ${cands.candidates.length} candidate(s) in ${elapsed}ms`,
+          );
+
+          const summaryLines =
+            flagged.length > 0
+              ? flagged.map(
+                  (m) => `- [${m.id}] "${m.title}" — changed: ${m.changed.join(", ")}`,
+                )
+              : [];
+
+          return {
+            content: [
+              {
+                type: "text" as const,
+                text: JSON.stringify(
+                  {
+                    flagged: flagged.map((m) => ({
+                      id: m.id,
+                      title: m.title,
+                      changed: m.changed,
+                    })),
+                    checked: cands.candidates.length,
+                    message:
+                      flagged.length > 0
+                        ? `🔍 ${flagged.length} memory(ies) may be stale — related code changed:\n${summaryLines.join("\n")}`
+                        : "🔍 No stale memories found — related code hasn't changed",
+                    hint:
+                      flagged.length > 0
+                        ? "Review these memories and re-ingest with updated content if needed"
+                        : undefined,
                   },
                   null,
                   2,
