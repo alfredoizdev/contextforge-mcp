@@ -22,6 +22,9 @@ import {
   RelateInputSchema,
   ListRelationshipsInputSchema,
   DeleteInputSchema,
+  MemoryConfirmInputSchema,
+  MemoryForgetInputSchema,
+  MemoryCorrectInputSchema,
   GitConnectInputSchema,
   GitActivateInputSchema,
   GitDisconnectInputSchema,
@@ -177,6 +180,9 @@ function logTool(toolName: string, details?: string) {
     memory_unlink_project: "🔓",
     memory_current_project: "📍",
     memory_check_freshness: "🔍",
+    memory_confirm: "✅",
+    memory_correct: "✏️",
+    memory_forget: "🗑️",
     tasks_list: "📋",
     tasks_start: "▶️",
     tasks_resolve: "✅",
@@ -1392,6 +1398,82 @@ const TOOLS = [
         },
       },
       required: [],
+    },
+  },
+  {
+    name: "memory_confirm",
+    description:
+      "Confirm that a memory flagged by memory_check_freshness is still accurate, even though its related code changed. Updates the memory's confirmed timestamp so it won't be flagged again until the code changes further.",
+    annotations: {
+      title: "Confirm Memory",
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        id: {
+          type: "string",
+          description: "UUID of the memory item to confirm as still accurate",
+        },
+      },
+      required: ["id"],
+    },
+  },
+  {
+    name: "memory_correct",
+    description:
+      "Update a memory flagged by memory_check_freshness with corrected content after its related code changed. Replaces the stored content and refreshes the git context (current commit SHA) so future freshness checks compare against the new baseline.",
+    annotations: {
+      title: "Correct Memory",
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+      openWorldHint: false,
+    },
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        id: {
+          type: "string",
+          description: "UUID of the memory item to correct",
+        },
+        content: {
+          type: "string",
+          description: "The corrected, up-to-date content",
+        },
+        related_paths: {
+          type: "array",
+          items: { type: "string" },
+          description:
+            'Files/dirs this memory is about (e.g. ["src/api.ts"]). Refreshes staleness tracking for future checks.',
+        },
+      },
+      required: ["id", "content"],
+    },
+  },
+  {
+    name: "memory_forget",
+    description:
+      "Delete a memory flagged by memory_check_freshness that is no longer relevant or accurate. Use this instead of memory_delete when acting directly on a freshness check result.",
+    annotations: {
+      title: "Forget Memory",
+      readOnlyHint: false,
+      destructiveHint: true,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        id: {
+          type: "string",
+          description: "UUID of the memory item to forget (delete)",
+        },
+      },
+      required: ["id"],
     },
   },
   // ============ Tasks (Task Management) ============
@@ -3604,6 +3686,85 @@ async function main() {
                   null,
                   2,
                 ),
+              },
+            ],
+          };
+        }
+
+        case "memory_confirm": {
+          const input = MemoryConfirmInputSchema.parse(args);
+          logTool(name, input.id);
+
+          const result = await apiClient.freshnessAction("confirm", input.id);
+          const elapsed = Date.now() - startTime;
+
+          if (result.error) {
+            logError(`Failed to confirm memory ${input.id}: ${result.error}`);
+          } else {
+            logSuccess(`Confirmed memory ${input.id} (${elapsed}ms)`);
+          }
+
+          return {
+            content: [
+              {
+                type: "text" as const,
+                text: result.error
+                  ? `❌ Failed to confirm memory ${input.id}: ${result.error}`
+                  : `✅ Confirmed memory ${input.id} as still accurate.`,
+              },
+            ],
+          };
+        }
+
+        case "memory_correct": {
+          const input = MemoryCorrectInputSchema.parse(args);
+          logTool(name, input.id);
+
+          const gitCtx = buildGitContext(currentGit(), input.related_paths);
+          const result = await apiClient.freshnessAction("correct", input.id, {
+            content: input.content,
+            git_context: gitCtx,
+          });
+          const elapsed = Date.now() - startTime;
+
+          if (result.error) {
+            logError(`Failed to correct memory ${input.id}: ${result.error}`);
+          } else {
+            logSuccess(`Corrected memory ${input.id} (${elapsed}ms)`);
+          }
+
+          return {
+            content: [
+              {
+                type: "text" as const,
+                text: result.error
+                  ? `❌ Failed to correct memory ${input.id}: ${result.error}`
+                  : `✏️ Updated memory ${input.id} with corrected content.`,
+              },
+            ],
+          };
+        }
+
+        case "memory_forget": {
+          const input = MemoryForgetInputSchema.parse(args);
+          logTool(name, input.id);
+
+          const result = await apiClient.freshnessAction("forget", input.id);
+          const elapsed = Date.now() - startTime;
+
+          if (result.error) {
+            logError(`Failed to forget memory ${input.id}: ${result.error}`);
+          } else {
+            logSuccess(`Forgot memory ${input.id} (${elapsed}ms)`);
+          }
+
+          return {
+            content: [
+              {
+                type: "text" as const,
+                text: result.error
+                  ? `❌ Failed to forget memory ${input.id}: ${result.error}`
+                  : `🗑️ Forgot memory ${input.id}.`,
               },
             ],
           };

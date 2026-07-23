@@ -270,6 +270,28 @@ export const DeleteInputSchema = z
 
 export type DeleteInput = z.infer<typeof DeleteInputSchema>;
 
+// ============ Freshness Input Schemas ============
+
+export const MemoryConfirmInputSchema = z.object({
+  id: z.string().uuid(),
+});
+
+export type MemoryConfirmInput = z.infer<typeof MemoryConfirmInputSchema>;
+
+export const MemoryForgetInputSchema = z.object({
+  id: z.string().uuid(),
+});
+
+export type MemoryForgetInput = z.infer<typeof MemoryForgetInputSchema>;
+
+export const MemoryCorrectInputSchema = z.object({
+  id: z.string().uuid(),
+  content: z.string().min(1, "Content is required"),
+  related_paths: z.preprocess(parseArrayInput, z.array(z.string()).default([])), // Files/dirs this memory is about (staleness detection)
+});
+
+export type MemoryCorrectInput = z.infer<typeof MemoryCorrectInputSchema>;
+
 // ============ API Response Types ============
 
 export interface QueryResult {

@@ -833,6 +833,18 @@ export class ApiClient {
     });
   }
 
+  async freshnessAction(
+    action: "confirm" | "correct" | "forget",
+    id: string,
+    extra?: { content?: string; git_context?: unknown },
+  ): Promise<{ ok?: boolean; error?: string }> {
+    return this.request("POST", "/functions/v1/freshness", {
+      action,
+      id,
+      ...extra,
+    });
+  }
+
   // ============ Snapshots ============
 
   async snapshotCreate(

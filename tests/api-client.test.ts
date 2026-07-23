@@ -282,6 +282,84 @@ describe('ApiClient', () => {
     });
   });
 
+  describe('freshnessAction', () => {
+    it('should post action + id for confirm', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        json: async () => ({ ok: true }),
+      });
+
+      const result = await client.freshnessAction('confirm', 'id1');
+
+      expect(result).toEqual({ ok: true });
+      expect(mockFetch).toHaveBeenCalledWith(
+        'https://api.contextforge.io/functions/v1/freshness',
+        expect.objectContaining({
+          method: 'POST',
+        })
+      );
+
+      const callArgs = mockFetch.mock.calls[0];
+      const body = JSON.parse(callArgs[1].body);
+      expect(body).toMatchObject({ action: 'confirm', id: 'id1' });
+    });
+
+    it('should post action + id for forget', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        json: async () => ({ ok: true }),
+      });
+
+      await client.freshnessAction('forget', 'id3');
+
+      const callArgs = mockFetch.mock.calls[0];
+      const body = JSON.parse(callArgs[1].body);
+      expect(body).toMatchObject({ action: 'forget', id: 'id3' });
+    });
+
+    it('should include content and git_context for correct', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        json: async () => ({ ok: true }),
+      });
+
+      const gitContext = {
+        repo: 'org/repo',
+        sha: 'abc123',
+        related_paths: ['src/index.ts'],
+      };
+      await client.freshnessAction('correct', 'id2', {
+        content: 'updated content',
+        git_context: gitContext,
+      });
+
+      const callArgs = mockFetch.mock.calls[0];
+      const body = JSON.parse(callArgs[1].body);
+      expect(body).toMatchObject({
+        action: 'correct',
+        id: 'id2',
+        content: 'updated content',
+        git_context: gitContext,
+      });
+    });
+
+    it('should propagate API errors', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 404,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        json: async () => ({ error: 'Item not found', code: 'NOT_FOUND' }),
+      });
+
+      await expect(client.freshnessAction('confirm', 'missing-id')).rejects.toThrow(
+        ApiClientError
+      );
+    });
+  });
+
   describe('healthCheck', () => {
     it('should return true when healthy', async () => {
       mockFetch.mockResolvedValueOnce({
