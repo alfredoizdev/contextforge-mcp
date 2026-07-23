@@ -11,7 +11,7 @@ const DEFAULT_CACHE_FILE = join(
 );
 
 /** Bump when a new init section ships, to re-nudge users who dismissed the old hint. */
-export const HINT_VERSION = 2;
+export const HINT_VERSION = 3;
 
 /** One-time tip appended to the first tool response of a session. */
 export const INIT_HINT_TEXT =

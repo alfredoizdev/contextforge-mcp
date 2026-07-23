@@ -153,6 +153,9 @@ At the START of every new conversation, BEFORE responding to the user's first me
 
 Then address the user's request.
 
+### Then check freshness (once context is loaded):
+5. Call \`mcp__contextforge__memory_check_freshness\`. If it returns flagged memories, list them briefly and ask the user to **confirm / correct / forget** each (call \`memory_confirm\`, \`memory_correct\`, or \`memory_forget\`). If it returns none, say nothing about freshness.
+
 ### Rules
 - If the MCP returns nothing / "no project linked" → skip the summary, suggest \`mcp__contextforge__memory_link_project\`, and continue.
 - Keep the summary short (this runs every conversation) — never dump raw tool output.
@@ -183,6 +186,9 @@ At the START of every new conversation, BEFORE responding to the user's first me
 - Active sessions: [count, or "none"]
 
 Then address the user's request.
+
+## Then check freshness (once context is loaded):
+5. Call \`mcp__contextforge__memory_check_freshness\`. If it returns flagged memories, list them briefly and ask the user to **confirm / correct / forget** each (call \`memory_confirm\`, \`memory_correct\`, or \`memory_forget\`). If it returns none, say nothing about freshness.
 
 ## Rules
 - If the MCP returns nothing / "no project linked" → skip the summary, suggest \`mcp__contextforge__memory_link_project\`, and continue.

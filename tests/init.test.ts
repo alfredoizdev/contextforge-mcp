@@ -212,6 +212,12 @@ describe("runInit", () => {
   });
 });
 
+describe("Startup sections", () => {
+  it("startup rule instructs a freshness check", () => {
+    expect(CLAUDE_STARTUP_SECTION).toContain("memory_check_freshness");
+  });
+});
+
 describe("detectEditors", () => {
   let tmp: string;
 
