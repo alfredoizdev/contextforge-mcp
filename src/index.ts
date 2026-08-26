@@ -66,7 +66,7 @@ import { basename } from "path";
 import { checkForUpdates, getUpdateNotice } from "./update-checker.js";
 import { formatIngestResult } from "./format-ingest.js";
 import { validateKey } from "./validate-key.js";
-import { runInitCLI } from "./init.js";
+import { runInitCLI, SERVER_INSTRUCTIONS } from "./init.js";
 import { checkInitHint, consumeInitHint } from "./init-hint.js";
 import { SessionPresence } from "./session-presence.js";
 import { currentGit, buildGitContext, changedSince } from "./freshness.js";
@@ -2298,6 +2298,10 @@ async function main() {
       version: VERSION,
     },
     {
+      // Injected into the model's context by clients that honor the MCP
+      // `instructions` field — makes ContextForge memory auto-load at session
+      // start with no per-tool config. See SERVER_INSTRUCTIONS in init.ts.
+      instructions: SERVER_INSTRUCTIONS,
       capabilities: {
         tools: {},
       },

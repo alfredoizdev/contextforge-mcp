@@ -10,6 +10,29 @@ export const PRESENCE_MARKER = "<!-- contextforge-mcp:presence -->";
 /** Hidden sentinel for the Startup Context section. */
 export const STARTUP_MARKER = "<!-- contextforge-mcp:startup -->";
 
+/**
+ * Server-level `instructions` returned in the MCP `initialize` response.
+ *
+ * Any MCP client that honors the `instructions` field (Claude Desktop, Claude
+ * Code, and a growing set of others) injects this into the model's context the
+ * moment the connection opens — so it works WITHOUT the user editing CLAUDE.md,
+ * .cursorrules, or any per-tool settings. This is the closest thing to
+ * "install → memory just works" and applies equally to new and existing users
+ * (existing users get it automatically once their client resolves this package
+ * version; no re-`init`, no config changes).
+ *
+ * Kept short and client-agnostic on purpose: tools are referenced by their base
+ * names (no `mcp__contextforge__` prefix, which is Claude-Code-specific).
+ */
+export const SERVER_INSTRUCTIONS = `ContextForge is this project's persistent memory. Its tools store and recall the user's projects, decisions, tasks, and past conversations across sessions — treat them as the source of truth for anything about the user's history, over local files.
+
+Use them proactively:
+- At the START of a conversation, before answering the first question about the user's project, call \`memory_query\` (and \`tasks_what_next\` if they ask what to work on) to load what you already know. Do NOT claim you have no memory without calling it first.
+- Whenever the user references past context — "what did we decide", "where did we leave off", "yesterday", "remember", "we discussed" — call \`memory_query\` FIRST, then answer using those results.
+- When the user asks you to save or remember something, call \`memory_ingest\`.
+
+Only if a query returns nothing should you say the memory is empty.`;
+
 /** CLAUDE.md content appended (or written fresh) by `contextforge-mcp init`. */
 export const CLAUDE_MEMORY_SECTION = `${INIT_MARKER}
 

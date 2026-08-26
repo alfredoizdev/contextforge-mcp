@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.5.1
+
+- The MCP `initialize` response now returns a server-level `instructions` block. Clients that honor it (Claude Desktop, Claude Code, and others) inject it into the model on connect, so ContextForge memory is used automatically at the start of a session — no need to edit `CLAUDE.md`, `.cursorrules`, or any per-tool settings.
+- Applies to existing users too: no re-`init` and no config changes — you get it once your client resolves this version (automatic with `npx -y contextforge-mcp`).
+
 ## 0.4.2
 
 - `init` now writes a third section, **Startup Context**, so Claude Code and Cursor load a short ContextForge project summary (overview, open tasks, live sessions) at the start of every conversation.
