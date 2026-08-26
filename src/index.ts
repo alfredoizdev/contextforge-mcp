@@ -80,6 +80,14 @@ const require = createRequire(import.meta.url);
 const pkg = require("../package.json");
 const VERSION: string = pkg.version;
 
+// ============ CLI subcommand: `contextforge-mcp --version` ============
+// Print the version and exit. Runs before anything else so clients can check
+// which MCP version they are on without starting the server.
+if (["--version", "-v", "-V", "--v", "version"].includes(process.argv[2])) {
+  console.log(`contextforge-mcp ${VERSION}`);
+  process.exit(0);
+}
+
 // ============ CLI subcommand: `contextforge-mcp init` ============
 // Must run BEFORE any MCP server setup, since this exits the process.
 if (process.argv[2] === "init") {

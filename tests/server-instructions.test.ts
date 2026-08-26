@@ -29,6 +29,14 @@ describe("SERVER_INSTRUCTIONS content", () => {
     expect(SERVER_INSTRUCTIONS).toContain("memory_ingest");
   });
 
+  it("steers proactive saving over local/file-based memory", () => {
+    // save proactively, not only on an explicit "remember"
+    expect(SERVER_INSTRUCTIONS).toMatch(/proactively/i);
+    // ContextForge wins over any built-in / file-based memory for writes
+    expect(SERVER_INSTRUCTIONS).toMatch(/source of truth/i);
+    expect(SERVER_INSTRUCTIONS).toMatch(/not to local files/i);
+  });
+
   it("does not leak the Claude-Code-specific tool prefix", () => {
     expect(SERVER_INSTRUCTIONS).not.toContain("mcp__contextforge__");
   });
@@ -48,5 +56,11 @@ describe("MCP server wiring", () => {
 
   it("passes instructions into the Server options", () => {
     expect(indexSrc).toContain("instructions: SERVER_INSTRUCTIONS");
+  });
+
+  it("handles a --version / -v flag that prints the version and exits", () => {
+    expect(indexSrc).toMatch(/["']--version["']/);
+    expect(indexSrc).toMatch(/["']-v["']/);
+    expect(indexSrc).toMatch(/console\.log\(`contextforge-mcp \$\{VERSION\}`\)/);
   });
 });
