@@ -1,0 +1,191 @@
+name: Auto PR & Merge
+
+# Push any non-main branch → waits for CI (test.yml) to pass → opens a PR and
+# squash-merges it into main. Mirrors the flow in the MCP-context-forge monorepo.
+# Requires a repo secret PAT_TOKEN (a PAT with `repo` + `workflow` scope): the
+# default GITHUB_TOKEN cannot create PRs that trigger further workflows.
+
+on:
+  push:
+    branches:
+      - '**'
+      - '!main'
+
+jobs:
+  auto-pr-merge:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.PAT_TOKEN }}
+
+      - name: Wait for CI to complete
+        env:
+          GH_TOKEN: ${{ secrets.PAT_TOKEN }}
+        run: |
+          echo "Waiting for CI workflow to complete..."
+          BRANCH="${{ github.ref_name }}"
+          SHA="${{ github.sha }}"
+
+          # Wait up to 10 minutes for CI to finish
+          for i in $(seq 1 60); do
+            STATUS=$(gh run list --branch "$BRANCH" --workflow "test.yml" --json status,conclusion,headSha --jq ".[] | select(.headSha==\"$SHA\") | .status" | head -1)
+
+            if [ "$STATUS" = "completed" ]; then
+              CONCLUSION=$(gh run list --branch "$BRANCH" --workflow "test.yml" --json status,conclusion,headSha --jq ".[] | select(.headSha==\"$SHA\") | .conclusion" | head -1)
+              echo "CI completed with conclusion: $CONCLUSION"
+
+              if [ "$CONCLUSION" != "success" ]; then
+                echo "::error::CI failed. Skipping PR creation and merge."
+                exit 1
+              fi
+              break
+            fi
+
+            echo "CI status: $STATUS. Waiting 10s... ($i/60)"
+            sleep 10
+          done
+
+          if [ "$STATUS" != "completed" ]; then
+            echo "::error::Timed out waiting for CI"
+            exit 1
+          fi
+
+          echo "CI passed!"
+
+      - name: Get branch info
+        id: branch
+        run: |
+          BRANCH="${{ github.ref_name }}"
+          echo "name=$BRANCH" >> $GITHUB_OUTPUT
+
+          # Get non-merge commits unique to this branch
+          COMMITS=$(git log origin/main..HEAD --no-merges --pretty=format:"- %s" 2>/dev/null || echo "")
+          COMMIT_COUNT=$(git rev-list --count --no-merges origin/main..HEAD 2>/dev/null || echo "0")
+
+          if [ "$COMMIT_COUNT" -eq 0 ] || [ -z "$COMMITS" ]; then
+            echo "No unique commits between main and $BRANCH. Skipping PR."
+            echo "skip=true" >> $GITHUB_OUTPUT
+          else
+            echo "skip=false" >> $GITHUB_OUTPUT
+          fi
+
+          echo "commits<<EOF" >> $GITHUB_OUTPUT
+          echo "$COMMITS" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Check if PR already exists
+        if: steps.branch.outputs.skip != 'true'
+        id: check-pr
+        env:
+          GH_TOKEN: ${{ secrets.PAT_TOKEN }}
+        run: |
+          PR_NUMBER=$(gh pr list --head "${{ steps.branch.outputs.name }}" --json number --jq '.[0].number // empty')
+          if [ -n "$PR_NUMBER" ]; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+            echo "number=$PR_NUMBER" >> $GITHUB_OUTPUT
+            echo "PR #$PR_NUMBER already exists"
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "No existing PR found"
+          fi
+
+      - name: Create Pull Request
+        if: steps.branch.outputs.skip != 'true' && steps.check-pr.outputs.exists == 'false'
+        id: create-pr
+        env:
+          GH_TOKEN: ${{ secrets.PAT_TOKEN }}
+        run: |
+          PR_URL=$(gh pr create \
+            --title "PR: ${{ steps.branch.outputs.name }}" \
+            --body "## Auto-generated PR
+
+          **Branch:** \`${{ steps.branch.outputs.name }}\`
+          **CI Status:** All checks passed
+
+          ### Commits
+          ${{ steps.branch.outputs.commits }}
+
+          ---
+          _Created and auto-merged by GitHub Actions_" \
+            --base main \
+            --head "${{ steps.branch.outputs.name }}")
+
+          PR_NUMBER=$(echo "$PR_URL" | grep -oE '[0-9]+$')
+          echo "number=$PR_NUMBER" >> $GITHUB_OUTPUT
+          echo "Created PR #$PR_NUMBER"
+
+      - name: Get PR number
+        if: steps.branch.outputs.skip != 'true'
+        id: pr-number
+        run: |
+          if [ "${{ steps.check-pr.outputs.exists }}" == "true" ]; then
+            echo "number=${{ steps.check-pr.outputs.number }}" >> $GITHUB_OUTPUT
+          else
+            echo "number=${{ steps.create-pr.outputs.number }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Update branch with main
+        if: steps.branch.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.PAT_TOKEN }}
+        run: |
+          BRANCH="${{ steps.branch.outputs.name }}"
+          echo "Syncing $BRANCH with main to avoid merge conflicts..."
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git fetch origin main
+          git checkout "$BRANCH"
+
+          # Try to merge main into the branch
+          if ! git merge origin/main --no-edit; then
+            echo "::error::Merge conflict detected that cannot be auto-resolved. Please merge main locally."
+            git merge --abort
+            exit 1
+          fi
+
+          # Push only if there were new commits from main
+          if [ "$(git rev-parse HEAD)" != "$(git rev-parse origin/$BRANCH)" ]; then
+            echo "Pushing updated branch..."
+            git push origin "$BRANCH"
+            echo "Branch updated with latest main"
+
+            # Wait for new CI run triggered by the push
+            echo "Waiting 15s for new CI run to start..."
+            sleep 15
+            NEW_SHA=$(git rev-parse HEAD)
+            for i in $(seq 1 60); do
+              STATUS=$(gh run list --branch "$BRANCH" --workflow "test.yml" --json status,conclusion,headSha --jq ".[] | select(.headSha==\"$NEW_SHA\") | .status" | head -1)
+              if [ "$STATUS" = "completed" ]; then
+                CONCLUSION=$(gh run list --branch "$BRANCH" --workflow "test.yml" --json status,conclusion,headSha --jq ".[] | select(.headSha==\"$NEW_SHA\") | .conclusion" | head -1)
+                if [ "$CONCLUSION" != "success" ]; then
+                  echo "::error::CI failed after branch update."
+                  exit 1
+                fi
+                echo "CI passed on updated branch!"
+                break
+              fi
+              echo "Waiting for CI on updated branch... ($i/60)"
+              sleep 10
+            done
+          else
+            echo "Branch already up to date with main"
+          fi
+
+      - name: Auto-merge PR
+        if: steps.branch.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.PAT_TOKEN }}
+        run: |
+          PR_NUMBER="${{ steps.pr-number.outputs.number }}"
+          echo "Merging PR #$PR_NUMBER..."
+          gh pr merge "$PR_NUMBER" --squash --delete-branch
+          echo "PR #$PR_NUMBER merged successfully!"

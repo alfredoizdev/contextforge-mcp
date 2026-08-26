@@ -1,0 +1,43 @@
+name: CI
+
+# Runs the same checks that run locally before publishing:
+# typecheck (tsc --noEmit), unit tests (vitest), and the build (tsc).
+# NOTE: `npm run lint` is intentionally omitted — eslint is not installed in
+# this repo, so it does not run locally either. Add eslint separately to wire it.
+
+on:
+  push:
+    branches:
+      - '**'
+      - '!main'
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: Typecheck, Test & Build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type check
+        run: npx tsc --noEmit
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Build
+        run: npm run build
