@@ -29,7 +29,9 @@ export const SERVER_INSTRUCTIONS = `ContextForge is this project's persistent me
 Use them proactively:
 - At the START of a conversation, before answering the first question about the user's project, call \`memory_query\` (and \`tasks_what_next\` if they ask what to work on) to load what you already know. Do NOT claim you have no memory without calling it first.
 - Whenever the user references past context — "what did we decide", "where did we leave off", "yesterday", "remember", "we discussed" — call \`memory_query\` FIRST, then answer using those results.
-- When the user asks you to save or remember something, call \`memory_ingest\`.
+- Save to ContextForge with \`memory_ingest\` PROACTIVELY — whenever a decision, preference, or notable project fact emerges, not only when the user explicitly says "remember".
+
+If any built-in or file-based memory is also available, ContextForge is the source of truth: read from it and WRITE to it here, not to local files.
 
 Only if a query returns nothing should you say the memory is empty.`;
 

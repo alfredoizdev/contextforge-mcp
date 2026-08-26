@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.5.2
+
+- The `initialize` `instructions` now also steer **writes**: the model is told to save to ContextForge proactively (not only when the user says "remember") and to prefer ContextForge over any built-in or file-based memory for both reading and writing. Closes the gap where a client without a CLAUDE.md rule saved work to local file-memory instead of ContextForge.
+- New `contextforge-mcp --version` command (also `-v`, `-V`, `version`) prints the installed MCP version and exits, so clients can check what they are running.
+
 ## 0.5.1
 
 - The MCP `initialize` response now returns a server-level `instructions` block. Clients that honor it (Claude Desktop, Claude Code, and others) inject it into the model on connect, so ContextForge memory is used automatically at the start of a session — no need to edit `CLAUDE.md`, `.cursorrules`, or any per-tool settings.
