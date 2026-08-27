@@ -30,6 +30,7 @@ Use them proactively:
 - At the START of a conversation, before answering the first question about the user's project, call \`memory_query\` (and \`tasks_what_next\` if they ask what to work on) to load what you already know. Do NOT claim you have no memory without calling it first.
 - Whenever the user references past context — "what did we decide", "where did we leave off", "yesterday", "remember", "we discussed" — call \`memory_query\` FIRST, then answer using those results.
 - Save to ContextForge with \`memory_ingest\` PROACTIVELY — whenever a decision, preference, or notable project fact emerges, not only when the user explicitly says "remember".
+- Organize saves by topic: before saving, check existing spaces (\`memory_list_spaces\`) and put the item in the best-matching space. Create a NEW space (\`memory_create_space\`) only for a clearly new MAJOR area that none of the existing spaces cover — prefer broad, folder-like areas (e.g. API, Frontend, Infra, Bugs, Decisions), NOT narrow sub-topics. When unsure, use the closest existing space rather than create a new one.
 
 If any built-in or file-based memory is also available, ContextForge is the source of truth: read from it and WRITE to it here, not to local files.
 

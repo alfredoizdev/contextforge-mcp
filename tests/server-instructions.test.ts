@@ -37,6 +37,14 @@ describe("SERVER_INSTRUCTIONS content", () => {
     expect(SERVER_INSTRUCTIONS).toMatch(/not to local files/i);
   });
 
+  it("steers topic-based organization into spaces", () => {
+    // route to an existing space, create only for a new major area
+    expect(SERVER_INSTRUCTIONS).toContain("memory_list_spaces");
+    expect(SERVER_INSTRUCTIONS).toContain("memory_create_space");
+    expect(SERVER_INSTRUCTIONS).toMatch(/best-matching space/i);
+    expect(SERVER_INSTRUCTIONS).toMatch(/new MAJOR area/i);
+  });
+
   it("does not leak the Claude-Code-specific tool prefix", () => {
     expect(SERVER_INSTRUCTIONS).not.toContain("mcp__contextforge__");
   });
