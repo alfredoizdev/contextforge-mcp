@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.0
+
+- Topic-based memory organization. The `initialize` `instructions` now tell the model to route each save into the best-matching existing space (`memory_list_spaces`) and to create a new space (`memory_create_space`) only for a clearly new major area — so knowledge lands in a small set of broad, folder-like spaces (API, Frontend, Infra, Bugs, Decisions…) instead of one undifferentiated dump. Behavior-only; reuses existing tools. (Moving items between spaces — `memory_move_item` — ships in a later release.)
+
 ## 0.5.2
 
 - The `initialize` `instructions` now also steer **writes**: the model is told to save to ContextForge proactively (not only when the user says "remember") and to prefer ContextForge over any built-in or file-based memory for both reading and writing. Closes the gap where a client without a CLAUDE.md rule saved work to local file-memory instead of ContextForge.
