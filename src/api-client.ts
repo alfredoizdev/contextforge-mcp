@@ -691,6 +691,34 @@ export class ApiClient {
     return result.deleted;
   }
 
+  async moveItem(input: {
+    id?: string;
+    title?: string;
+    target_space: string;
+  }): Promise<{
+    id: string;
+    title: string;
+    from_space: string;
+    to_space: string;
+    to_space_name?: string;
+  }> {
+    const result = await this.request<{
+      success: boolean;
+      moved: {
+        id: string;
+        title: string;
+        from_space: string;
+        to_space: string;
+        to_space_name?: string;
+      };
+    }>("POST", "/functions/v1/move-item", {
+      id: input.id,
+      title: input.title,
+      target_space: input.target_space,
+    });
+    return result.moved;
+  }
+
   // ============ Stats ============
 
   async getStats(spaceId?: string): Promise<StatsResponse> {

@@ -167,6 +167,7 @@ function logTool(toolName: string, details?: string) {
     memory_list_items: "📋",
     memory_create_space: "✨",
     memory_move_space: "📦",
+    memory_move_item: "🔀",
     memory_delete_space: "🗑️",
     memory_delete_project: "🗑️",
     memory_relate: "🔗",
@@ -602,6 +603,37 @@ const TOOLS = [
         },
       },
       required: ["space", "target_project"],
+    },
+  },
+  {
+    name: "memory_move_item",
+    description:
+      "Move a knowledge item to a different space (organizes memory by topic). Identify the item by id or a title substring, and give the target space by name or UUID. Cross-project moves within your org are allowed.",
+    annotations: {
+      title: "Move Item",
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        id: {
+          type: "string",
+          description: "Item UUID to move (provide id or title)",
+        },
+        title: {
+          type: "string",
+          description:
+            "Item title substring to move (provide id or title)",
+        },
+        target_space: {
+          type: "string",
+          description: "Target space name or UUID to move the item into",
+        },
+      },
+      required: ["target_space"],
     },
   },
   {
@@ -2712,6 +2744,45 @@ async function main() {
                       project: updatedSpace.project || null,
                     },
                     message: `Space "${updatedSpace.name}" moved to project "${updatedSpace.project?.name}"`,
+                  },
+                  null,
+                  2,
+                ),
+              },
+            ],
+          };
+        }
+
+        case "memory_move_item": {
+          const { id, title, target_space } = args as {
+            id?: string;
+            title?: string;
+            target_space: string;
+          };
+          logTool(name, `"${id || title}" → "${target_space}"`);
+
+          const moved = await apiClient.moveItem({ id, title, target_space });
+          const elapsed = Date.now() - startTime;
+
+          logSuccess(
+            `Moved item "${moved.title}" to space "${moved.to_space_name || moved.to_space}" in ${elapsed}ms`,
+          );
+
+          return {
+            content: [
+              {
+                type: "text" as const,
+                text: JSON.stringify(
+                  {
+                    success: true,
+                    moved: {
+                      id: moved.id,
+                      title: moved.title,
+                      from_space: moved.from_space,
+                      to_space: moved.to_space,
+                      to_space_name: moved.to_space_name || null,
+                    },
+                    message: `Item "${moved.title}" moved to space "${moved.to_space_name || moved.to_space}"`,
                   },
                   null,
                   2,
