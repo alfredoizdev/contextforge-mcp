@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.7.0
+
+- New `memory_move_item` tool — move a knowledge item to a different space by id or title, with the target space given by name or UUID. Completes the topic-organization feature: memory auto-organizes into topic spaces (0.6.0) and mis-filed items can now be moved. Cross-project moves within your org are allowed. (Requires the `move-item` backend endpoint to be deployed.)
+
 ## 0.6.0
 
 - Topic-based memory organization. The `initialize` `instructions` now tell the model to route each save into the best-matching existing space (`memory_list_spaces`) and to create a new space (`memory_create_space`) only for a clearly new major area — so knowledge lands in a small set of broad, folder-like spaces (API, Frontend, Infra, Bugs, Decisions…) instead of one undifferentiated dump. Behavior-only; reuses existing tools. (Moving items between spaces — `memory_move_item` — ships in a later release.)
