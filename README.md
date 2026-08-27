@@ -17,6 +17,9 @@ ContextForge MCP is an open-source MCP server that connects your AI coding assis
 - 👥 **Team collaboration** — share projects and memory with your team
 - 🆓 **Free tier** — get started without a credit card
 
+> [!NOTE]
+> **Works automatically, no config needed (v0.5.1+).** On connect, the server sends startup instructions to your AI client. Clients that honor them (Claude Desktop, Claude Code) **load your project memory at the start of every session and save new decisions proactively — without you editing any settings**. Running `init` (Step 4) is now a reinforcement, not a requirement, and still helps on clients that don't yet honor server instructions (e.g. Cursor).
+
 ---
 
 ## Quick Start
@@ -102,9 +105,11 @@ Add to your Copilot MCP config:
 }
 ```
 
-### 4. Initialize your project (required)
+### 4. Initialize your project (recommended)
 
-Set up your project so your AI editor knows to use ContextForge memory:
+> With v0.5.1+ the server auto-loads memory on supporting clients (see the note at the top), so this step is **optional but recommended**: it reinforces the behavior, covers clients that don't honor server instructions, and fully overrides the built-in file-based memory.
+
+Set up your project so your AI editor always prefers ContextForge memory:
 
 ```bash
 npx contextforge-mcp init
@@ -123,7 +128,7 @@ Files written:
 
 If no editor is detected, both files are generated.
 
-**Without this step, your AI will silently ignore ContextForge for memory queries** — even though the MCP is connected — because the built-in auto-memory wins by default.
+On clients that honor server instructions (Claude Desktop, Claude Code), ContextForge is used automatically even without this step. On other clients — or to guarantee the built-in file-based auto-memory never wins — run `init`: it writes explicit rules that always route memory to ContextForge.
 
 #### Override with `--editor`
 
@@ -134,6 +139,24 @@ If no editor is detected, both files are generated.
 | `--editor=all` | Generate both, skip detection |
 
 Re-running `init` is idempotent **per section** — sections you already have are left untouched; missing ones are appended. Upgrading from an older version? Just re-run `npx contextforge-mcp init`: it adds the new Startup Context section without touching the rest of your file.
+
+#### Check your version
+
+```bash
+npx contextforge-mcp --version   # also: -v, version
+```
+
+Prints the installed version (e.g. `contextforge-mcp 0.5.2`).
+
+#### Already using ContextForge? (existing users)
+
+Nothing to reconfigure. Update to the latest and restart your AI client:
+
+```bash
+npm update -g contextforge-mcp   # only if you installed globally; npx users get it on next launch
+```
+
+You do **not** need to re-run `init` — the auto-load behavior ships with the server and applies on your next connection.
 
 ---
 
