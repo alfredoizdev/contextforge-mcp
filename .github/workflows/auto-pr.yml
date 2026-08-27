@@ -101,21 +101,31 @@ jobs:
         id: create-pr
         env:
           GH_TOKEN: ${{ secrets.PAT_TOKEN }}
+          BRANCH_NAME: ${{ steps.branch.outputs.name }}
+          COMMITS: ${{ steps.branch.outputs.commits }}
         run: |
+          # Build the PR body in a file and pass values via env so commit
+          # messages containing quotes, $ or backticks cannot break the shell
+          # command (script injection).
+          BODY_FILE="$(mktemp)"
+          {
+            echo "## Auto-generated PR"
+            echo ""
+            echo "**Branch:** \`$BRANCH_NAME\`"
+            echo "**CI Status:** All checks passed"
+            echo ""
+            echo "### Commits"
+            echo "$COMMITS"
+            echo ""
+            echo "---"
+            echo "_Created and auto-merged by GitHub Actions_"
+          } > "$BODY_FILE"
+
           PR_URL=$(gh pr create \
-            --title "PR: ${{ steps.branch.outputs.name }}" \
-            --body "## Auto-generated PR
-
-          **Branch:** \`${{ steps.branch.outputs.name }}\`
-          **CI Status:** All checks passed
-
-          ### Commits
-          ${{ steps.branch.outputs.commits }}
-
-          ---
-          _Created and auto-merged by GitHub Actions_" \
+            --title "PR: $BRANCH_NAME" \
+            --body-file "$BODY_FILE" \
             --base main \
-            --head "${{ steps.branch.outputs.name }}")
+            --head "$BRANCH_NAME")
 
           PR_NUMBER=$(echo "$PR_URL" | grep -oE '[0-9]+$')
           echo "number=$PR_NUMBER" >> $GITHUB_OUTPUT
