@@ -348,6 +348,13 @@ export interface IngestResponse {
     embedded?: boolean;
   }>;
   tokens_used: number;
+  // Which space the memory actually landed in. `was_default` is true when the
+  // caller passed no space_id and it fell back to the project's default space.
+  space?: {
+    id: string;
+    name: string | null;
+    was_default: boolean;
+  };
 }
 
 export interface StatsResponse {

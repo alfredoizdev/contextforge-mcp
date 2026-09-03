@@ -25,11 +25,20 @@ export function formatIngestResult(
   }
   // created
   const unsearchable = item?.embedded === false;
+  const space = result.space;
+  // Show where the memory actually landed. Falls back to "to memory" for older
+  // servers that don't yet return the space, so the message stays natural.
+  const spaceSuffix = space?.name ? ` → space: ${space.name}` : ' to memory';
+  const savedMessage = unsearchable
+    ? `📥 Saved "${title}"${spaceSuffix} ⚠️ (saved but not yet searchable — embedding pending)`
+    : `📥 Saved "${title}"${spaceSuffix}`;
+  // When it fell back to the default space, nudge the caller toward routing.
+  const savedHint = space?.was_default
+    ? `Filed under your default space${space.name ? ` (${space.name})` : ''}. To route a memory to a specific space, pass space:"<space name>" on save, or move it with memory_move_item.`
+    : hint;
   return {
-    message: unsearchable
-      ? `📥 Saved "${title}" to memory ⚠️ (saved but not yet searchable — embedding pending)`
-      : `📥 Saved "${title}" to memory`,
-    hint,
-    details: { id: item?.id, title },
+    message: savedMessage,
+    hint: savedHint,
+    details: { id: item?.id, title, space_id: space?.id },
   };
 }

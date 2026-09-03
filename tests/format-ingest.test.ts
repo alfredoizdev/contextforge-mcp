@@ -29,4 +29,31 @@ describe('formatIngestResult', () => {
     expect(out.message).toContain('failed');
     expect(out.message).toContain('db down');
   });
+
+  it('created → shows the space name it landed in', () => {
+    const out = formatIngestResult(
+      {
+        ...base,
+        created: 1,
+        items: [{ id: 'k1', status: 'created', embedded: true }],
+        space: { id: 's1', name: 'Social Page', was_default: false },
+      } as IngestResponse,
+      'Note',
+    );
+    expect(out.message).toContain('Social Page');
+  });
+
+  it('created into the default space → nudges routing in the hint', () => {
+    const out = formatIngestResult(
+      {
+        ...base,
+        created: 1,
+        items: [{ id: 'k1', status: 'created', embedded: true }],
+        space: { id: 's1', name: 'Project Memory', was_default: true },
+      } as IngestResponse,
+      'Note',
+    );
+    expect(out.message).toContain('Project Memory');
+    expect(out.hint).toContain('space:');
+  });
 });
