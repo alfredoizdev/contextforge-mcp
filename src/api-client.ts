@@ -873,6 +873,19 @@ export class ApiClient {
     });
   }
 
+  async updateItem(
+    id: string,
+    content: string,
+    title?: string,
+  ): Promise<{
+    success?: boolean;
+    updated?: { id: string; title: string | null };
+    embedded?: boolean;
+    error?: string;
+  }> {
+    return this.request("POST", "/functions/v1/update-item", { id, content, title });
+  }
+
   // ============ Snapshots ============
 
   async snapshotCreate(
