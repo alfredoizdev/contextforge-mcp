@@ -25,6 +25,7 @@ import {
   MemoryConfirmInputSchema,
   MemoryForgetInputSchema,
   MemoryCorrectInputSchema,
+  MemoryUpdateInputSchema,
   GitConnectInputSchema,
   GitActivateInputSchema,
   GitDisconnectInputSchema,
@@ -1469,7 +1470,7 @@ const TOOLS = [
   {
     name: "memory_correct",
     description:
-      "Update a memory flagged by memory_check_freshness with corrected content after its related code changed. Replaces the stored content and refreshes the git context (current commit SHA) so future freshness checks compare against the new baseline.",
+      "Update a memory flagged by memory_check_freshness with corrected content after its related code changed. Replaces the stored content and refreshes the git context (current commit SHA) so future freshness checks compare against the new baseline. For a general edit to any memory that is NOT part of a freshness check, use memory_update instead.",
     annotations: {
       title: "Correct Memory",
       readOnlyHint: false,
@@ -1493,6 +1494,36 @@ const TOOLS = [
           items: { type: "string" },
           description:
             'Files/dirs this memory is about (e.g. ["src/api.ts"]). Refreshes staleness tracking for future checks.',
+        },
+      },
+      required: ["id", "content"],
+    },
+  },
+  {
+    name: "memory_update",
+    description:
+      "Edit any saved memory's content (and optionally its title) by id — for general corrections, not tied to a freshness check. Regenerates the item's embedding so semantic search reflects the new content. Get the id from memory_query or memory_list_items. (For a memory flagged by memory_check_freshness after related code changed, use memory_correct instead.)",
+    annotations: {
+      title: "Update Memory",
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+      openWorldHint: false,
+    },
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        id: {
+          type: "string",
+          description: "UUID of the memory item to update (from memory_query or memory_list_items)",
+        },
+        content: {
+          type: "string",
+          description: "The new, corrected content",
+        },
+        title: {
+          type: "string",
+          description: "Optional new title; omit to keep the current title",
         },
       },
       required: ["id", "content"],
@@ -3870,6 +3901,31 @@ async function main() {
                 text: result.error
                   ? `❌ Failed to correct memory ${input.id}: ${result.error}`
                   : `✏️ Updated memory ${input.id} with corrected content.`,
+              },
+            ],
+          };
+        }
+
+        case "memory_update": {
+          const input = MemoryUpdateInputSchema.parse(args);
+          logTool(name, input.id);
+
+          const result = await apiClient.updateItem(input.id, input.content, input.title);
+          const elapsed = Date.now() - startTime;
+
+          if (result.error) {
+            logError(`Failed to update memory ${input.id}: ${result.error}`);
+          } else {
+            logSuccess(`Updated memory ${input.id} (${elapsed}ms)`);
+          }
+
+          return {
+            content: [
+              {
+                type: "text" as const,
+                text: result.error
+                  ? `❌ Failed to update memory ${input.id}: ${result.error}`
+                  : `✏️ Updated memory ${input.id}.`,
               },
             ],
           };

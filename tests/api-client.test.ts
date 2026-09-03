@@ -360,6 +360,31 @@ describe('ApiClient', () => {
     });
   });
 
+  describe('updateItem', () => {
+    it('POSTs id, content and title to /functions/v1/update-item', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        json: async () => ({ success: true, updated: { id: 'id1', title: 'T' }, embedded: true }),
+      });
+      await client.updateItem('id1', 'new content', 'T');
+      const callArgs = mockFetch.mock.calls[0];
+      expect(callArgs[0]).toContain('/functions/v1/update-item');
+      const body = JSON.parse(callArgs[1].body);
+      expect(body).toMatchObject({ id: 'id1', content: 'new content', title: 'T' });
+    });
+
+    it('throws ApiClientError on 404', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 404,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        json: async () => ({ error: 'No live memory with that id in this workspace.' }),
+      });
+      await expect(client.updateItem('missing', 'x')).rejects.toThrow(ApiClientError);
+    });
+  });
+
   describe('healthCheck', () => {
     it('should return true when healthy', async () => {
       mockFetch.mockResolvedValueOnce({

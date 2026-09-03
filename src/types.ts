@@ -292,6 +292,14 @@ export const MemoryCorrectInputSchema = z.object({
 
 export type MemoryCorrectInput = z.infer<typeof MemoryCorrectInputSchema>;
 
+export const MemoryUpdateInputSchema = z.object({
+  id: z.string().uuid(),
+  content: z.string().min(1, "Content is required"),
+  title: z.string().optional(),
+});
+
+export type MemoryUpdateInput = z.infer<typeof MemoryUpdateInputSchema>;
+
 // ============ API Response Types ============
 
 export interface QueryResult {
