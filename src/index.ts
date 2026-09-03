@@ -66,6 +66,7 @@ import { createRequire } from "module";
 import { basename } from "path";
 import { checkForUpdates, getUpdateNotice } from "./update-checker.js";
 import { formatIngestResult } from "./format-ingest.js";
+import { buildRoutingHint } from "./space-routing.js";
 import { validateKey } from "./validate-key.js";
 import { runInitCLI, SERVER_INSTRUCTIONS } from "./init.js";
 import { checkInitHint, consumeInitHint } from "./init-hint.js";
@@ -80,6 +81,26 @@ import {
 const require = createRequire(import.meta.url);
 const pkg = require("../package.json");
 const VERSION: string = pkg.version;
+
+// Routable (non-git) space names, cached for the life of the process so the
+// per-default-save routing nudge (see memory_ingest) costs at most one fetch
+// per session rather than one per save.
+let routableSpaceNamesCache: string[] | null = null;
+async function getRoutableSpaceNames(client: {
+  listSpaces: (
+    projectId?: string,
+    spaceType?: "regular" | "git" | "all",
+  ) => Promise<Array<{ name: string }>>;
+}): Promise<string[]> {
+  if (routableSpaceNamesCache) return routableSpaceNamesCache;
+  try {
+    const spaces = await client.listSpaces(undefined, "regular");
+    routableSpaceNamesCache = spaces.map((s) => s.name).filter(Boolean);
+  } catch {
+    routableSpaceNamesCache = [];
+  }
+  return routableSpaceNamesCache;
+}
 
 // ============ CLI subcommand: `contextforge-mcp --version` ============
 // Print the version and exit. Runs before anything else so clients can check
@@ -330,7 +351,7 @@ const TOOLS = [
   {
     name: "memory_ingest",
     description:
-      "**Save important context to persistent memory — be proactive.** Call this WHENEVER you learn information that would be valuable in a future conversation: project decisions ('we chose Postgres because X'), architectural choices, user preferences, debugging insights, recurring patterns, deadlines, stakeholder context, or any 'remember this' / 'save this' / 'note that' style request from the user. Heuristic: if you would be sad to lose this fact when the conversation ends, ingest it. Better to over-save than to under-save — the memory_query semantic search will surface what's relevant later. Always pass meaningful `title` and `tags` so the item is discoverable. Set `deduplicate:false` to save even if identical content already exists.",
+      "**Save important context to persistent memory — be proactive.** Call this WHENEVER you learn information that would be valuable in a future conversation: project decisions ('we chose Postgres because X'), architectural choices, user preferences, debugging insights, recurring patterns, deadlines, stakeholder context, or any 'remember this' / 'save this' / 'note that' style request from the user. Heuristic: if you would be sad to lose this fact when the conversation ends, ingest it. Better to over-save than to under-save — the memory_query semantic search will surface what's relevant later. Always pass meaningful `title` and `tags` so the item is discoverable. Set `deduplicate:false` to save even if identical content already exists. **ROUTE BY TOPIC:** pass `space:\"<name>\"` matching the memory's topic so it lands in the right space instead of the catch-all default. If you don't yet know the project's spaces, call `memory_list_spaces` once and reuse the result. Saving without `space:` piles everything into one default space — avoid it in multi-space projects.",
     annotations: {
       title: "Save to Memory",
       readOnlyHint: false,
@@ -2397,6 +2418,10 @@ async function main() {
       switch (name) {
         case "memory_ingest": {
           const input = IngestInputSchema.parse(args);
+          // Capture the agent's routing intent BEFORE we resolve/pre-fill a
+          // default space id below (after which we can no longer tell whether
+          // the agent deliberately chose a space or just let it default).
+          const agentProvidedSpace = !!input.space_id;
           const title = input.title || input.content.slice(0, 50) + "...";
           logTool(name, `"${title}"`);
 
@@ -2436,11 +2461,26 @@ async function main() {
             input.title ||
             input.content.slice(0, 50) +
               (input.content.length > 50 ? "..." : "");
+
+          // Agent-driven routing nudge: when the agent didn't choose a space,
+          // the memory landed in the default. Hand it the real space list so it
+          // can route the next save (and move this one) — the server never
+          // silently re-routes.
+          let routingHint: string | null = null;
+          if (!agentProvidedSpace) {
+            const names = await getRoutableSpaceNames(apiClient);
+            routingHint = buildRoutingHint(names);
+          }
+          const ingestText = formatResponse(
+            formatIngestResult(result, itemTitle),
+          );
           return {
             content: [
               {
                 type: "text" as const,
-                text: formatResponse(formatIngestResult(result, itemTitle)),
+                text: routingHint
+                  ? `${ingestText}\n\n${routingHint}`
+                  : ingestText,
               },
             ],
           };
