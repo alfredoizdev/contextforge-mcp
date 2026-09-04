@@ -185,4 +185,25 @@ describe("searchTools", () => {
     const names2 = searchTools(fixture, "memory", 5).map((t) => t.name);
     expect(names).toEqual(names2);
   });
+
+  it("rejects short 3-char noise terms to prevent accidental matches", () => {
+    // This test locks in the noise reduction fix from round 2.
+    // Short 3-char terms should NOT match dozens of tools via substring.
+    // The fixture has tools with many substrings that contain noise terms:
+    // - "ate" appears in: create, delete, update, relate, activate, share, etc. (words ending in -ate)
+    // - "pro" appears in: programar, project, etc.
+    // - "tar" appears in: exportar, importar, listar, crear tarea, etc.
+    // - "del" appears in: delegar, delete, etc.
+    // These should NOT match because they're only 3 chars and fail all tiers.
+    const noiseQueries = [
+      { query: "tar", maxMatches: 3 },  // was 26 before fix
+      { query: "ate", maxMatches: 2 },  // was 22 before fix
+      { query: "pro", maxMatches: 2 },  // was 18 before fix
+      { query: "del", maxMatches: 3 },  // was 12 before fix
+    ];
+    for (const { query, maxMatches } of noiseQueries) {
+      const results = searchTools(HIDDEN, query, 59); // get all possible matches
+      expect(results.length).toBeLessThanOrEqual(maxMatches);
+    }
+  });
 });

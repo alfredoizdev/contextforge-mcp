@@ -105,7 +105,7 @@ export const SYNONYMS: Record<string, string[]> = {
   memory_ingest_batch: ["ingerir lote", "ingest batch", "guardar varios"],
   memory_delete_batch: ["borrar varios", "delete batch", "eliminar múltiples"],
   memory_link_project: ["vincular proyecto", "link project"],
-  memory_unlink_project: ["desvinrcular proyecto", "unlink project"],
+  memory_unlink_project: ["desvincular proyecto", "unlink project"],
   memory_current_project: ["proyecto actual", "current project"],
 
   // Git integration
@@ -177,9 +177,21 @@ function normalizeAccents(text: string): string {
  * Scoring is deliberately coarse — with 59 candidates the ranking only has to
  * put the right tool in the top few, not produce a calibrated score.
  *
- * Supports bidirectional stem matching for Spanish/English terms, e.g.
- * "exportar" matches "export" segment via substring overlap.
+ * Supports bidirectional stem matching for longer Spanish/English terms, e.g.
+ * "exportar" (8 chars) matches "export" segment, but "tar" (3 chars) does not.
  * Handles accented characters (Spanish: estadísticas vs estadisticas).
+ *
+ * Scoring hierarchy:
+ * - Exact name substring: +10
+ * - Exact segment match (e.g., "git" = "git"): +10
+ * - Fuzzy segment match (term >= 4 chars, e.g., "exportar" vs "export"): +6
+ * - Exact synonym word match: +8
+ * - Fuzzy synonym word match (term >= 4 chars): +6
+ * - Category match: +6
+ * - Description substring: +1
+ *
+ * Fuzzy matches require >= 4 character terms to prevent short fragments
+ * like "tar", "ate", "pro" from matching everything.
  */
 export function searchTools<T extends ToolDef>(hidden: T[], query: string, limit = 5): T[] {
   const terms = query
@@ -193,29 +205,63 @@ export function searchTools<T extends ToolDef>(hidden: T[], query: string, limit
     const name = t.name.toLowerCase();
     const segments = name.split("_");
     const category = categoryOf(t.name);
-    const synonyms = normalizeAccents((SYNONYMS[t.name] ?? []).join(" "));
+    const synonymWords = normalizeAccents((SYNONYMS[t.name] ?? []).join(" ")).split(/\s+/);
     const description = normalizeAccents(t.description);
     let score = 0;
 
     for (const term of terms) {
-      // Name match: full string or bidirectional segment match
-      if (name.includes(term)) {
+      // Name substring match: require 4+ chars to prevent "ate", "pro", "tar" from matching
+      // Short terms are matched via exact segment names instead
+      if (term.length >= 4 && name.includes(term)) {
         score += 10;
-      } else {
-        // Bidirectional stem matching: "exportar" matches "export"
-        let segmentMatch = false;
-        for (const seg of segments) {
-          if ((seg.includes(term) || term.includes(seg)) && Math.min(seg.length, term.length) >= 3) {
-            score += 10;
-            segmentMatch = true;
-            break;
-          }
+        continue;
+      }
+
+      // Segment matching: exact match (any length) scores 10, fuzzy (4+ chars) scores 6
+      // Exact segment matches are unrestricted so "git", "memory", etc. always work
+      let segmentMatched = false;
+      for (const seg of segments) {
+        if (seg === term) {
+          // Exact segment match: "git" === "git", "memory" === "memory"
+          score += 10;
+          segmentMatched = true;
+          break;
+        } else if (term.length >= 4 && (seg.includes(term) || term.includes(seg))) {
+          // Fuzzy segment match: only if term is at least 4 characters
+          // Prevents "tar" from matching "export", "ate" from matching "create", etc.
+          score += 6;
+          segmentMatched = true;
+          break;
         }
-        if (!segmentMatch) {
-          if (synonyms.includes(term)) score += 8;
-          else if (category === term) score += 6;
-          else if (description.includes(term)) score += 1;
+      }
+      if (segmentMatched) continue;
+
+      // Synonym word matching: tokenize and check exact or fuzzy word match
+      let synonymMatched = false;
+      for (const word of synonymWords) {
+        if (word === term) {
+          // Exact word match: "exportar" === "exportar"
+          score += 8;
+          synonymMatched = true;
+          break;
+        } else if (term.length >= 4 && (word.includes(term) || term.includes(word))) {
+          // Fuzzy word match: only if term is at least 4 characters
+          score += 6;
+          synonymMatched = true;
+          break;
         }
+      }
+      if (synonymMatched) continue;
+
+      // Category match
+      if (category === term) {
+        score += 6;
+        continue;
+      }
+
+      // Description substring match: require 4+ chars to prevent noise
+      if (term.length >= 4 && description.includes(term)) {
+        score += 1;
       }
     }
     return { tool: t, score };
