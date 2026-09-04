@@ -297,7 +297,7 @@ export function buildGatewayTool(hiddenCount: number): ToolDef {
     annotations: {
       title: "ContextForge Tools",
       readOnlyHint: false,
-      destructiveHint: false,
+      destructiveHint: true,
       idempotentHint: false,
       openWorldHint: false,
     },
