@@ -2697,7 +2697,7 @@ async function main() {
               content: [
                 {
                   type: "text" as const,
-                  text: "🗂️ No projects yet\n\n💡 Use memory_create_project to create your first project",
+                  text: "🗂️ No projects yet\n\n💡 Use cf_tools with query \"create project\" to create your first project",
                 },
               ],
             };
@@ -3234,7 +3234,7 @@ async function main() {
                         : `📡 No repositories connected`,
                     hint:
                       repoCount === 0
-                        ? "Use memory_git_connect to connect a GitHub repository"
+                        ? "Use cf_tools with query \"connect repo\" to connect a GitHub repository"
                         : undefined,
                   },
                   null,
@@ -3368,7 +3368,7 @@ async function main() {
                         : `📝 No commits synced yet`,
                     hint:
                       commitCount === 0
-                        ? "Use memory_git_sync to sync commits from your repository"
+                        ? "Use cf_tools with query \"sync git\" to sync commits from your repository"
                         : undefined,
                   },
                   null,
@@ -3406,7 +3406,7 @@ async function main() {
                         : `🔀 No pull requests synced yet`,
                     hint:
                       prCount === 0
-                        ? "Use memory_git_sync to sync PRs from your repository"
+                        ? "Use cf_tools with query \"sync git\" to sync PRs from your repository"
                         : undefined,
                   },
                   null,
@@ -3476,7 +3476,7 @@ async function main() {
                         : `🗂️ No snapshots created yet`,
                     hint:
                       snapshotCount === 0
-                        ? "Use memory_snapshot_create to backup your memory state"
+                        ? "Use cf_tools with query \"create snapshot\" to backup your memory state"
                         : undefined,
                   },
                   null,
@@ -4130,7 +4130,7 @@ async function main() {
             return `[${i.short_id}] ${i.title}\n  ${statusEmoji} ${i.status} | ${priorityLabel} ${i.priority} | 📁 ${i.project?.name || "No project"}${commentInfo}${resolvedBy}${createdBy}${taskUrl}`;
           });
 
-          const responseText = `📋 Found ${issueCount} task${issueCount === 1 ? "" : "s"}\n\n${issueLines.join("\n\n")}\n\n💡 Use tasks_start <issue_id> to begin working on a task`;
+          const responseText = `📋 Found ${issueCount} task${issueCount === 1 ? "" : "s"}\n\n${issueLines.join("\n\n")}\n\n💡 Use cf_tools with query "start task" to begin working on one`;
 
           return {
             content: [
@@ -4186,7 +4186,7 @@ async function main() {
                 text:
                   formatResponse({
                     message: `▶️ Now working on: ${result.issue?.title}`,
-                    hint: "Use tasks_resolve when you complete this task",
+                    hint: "Use cf_tools with query \"resolve task\" when you complete this task",
                     details: {
                       id: result.issue?.id,
                       description: result.issue?.description,
@@ -4271,7 +4271,7 @@ async function main() {
             content: [
               {
                 type: "text" as const,
-                text: `🎯 Next recommended task:\n\n[${result.issue.short_id || result.issue.id.slice(0, 6)}] ${result.issue.title}\n${priorityEmoji} ${result.issue.priority} | 📁 ${result.issue.project?.name || "No project"}${dueDate}${desc}\n\n📊 ${result.pending_count || 0} pending tasks remaining\n\n💡 Use tasks_start ${result.issue.id} to begin working\n\n🔗 ${getTaskDashboardUrl(result.issue.id)}`,
+                text: `🎯 Next recommended task:\n\n[${result.issue.short_id || result.issue.id.slice(0, 6)}] ${result.issue.title}\n${priorityEmoji} ${result.issue.priority} | 📁 ${result.issue.project?.name || "No project"}${dueDate}${desc}\n\n📊 ${result.pending_count || 0} pending tasks remaining\n\n💡 Use cf_tools with query "start task" to begin working\n\n🔗 ${getTaskDashboardUrl(result.issue.id)}`,
               },
             ],
           };
@@ -4319,7 +4319,7 @@ async function main() {
                     message: `➕ Task created: [${result.issue?.short_id}] ${result.issue?.title}`,
                     hint: assigneeEmail
                       ? `Assigned to ${assigneeEmail}`
-                      : "Use tasks_assign to assign this task to a collaborator",
+                      : "Use cf_tools with query \"assign task\" to assign this task to a collaborator",
                     details: {
                       id: result.issue?.short_id,
                       title: result.issue?.title,
@@ -4587,7 +4587,7 @@ async function main() {
               content: [
                 {
                   type: "text" as const,
-                  text: `💬 No comments on this task yet\n\n💡 Use tasks_add_comment to add one`,
+                  text: `💬 No comments on this task yet\n\n💡 Use cf_tools with query "add comment" to add one`,
                 },
               ],
             };
@@ -4695,7 +4695,7 @@ async function main() {
               content: [
                 {
                   type: "text" as const,
-                  text: `👥 No collaborators on project "${result.project?.name || "this project"}" yet\n\n💡 Use project_share to invite collaborators`,
+                  text: `👥 No collaborators on project "${result.project?.name || "this project"}" yet\n\n💡 Use cf_tools with query "share project" to invite collaborators`,
                 },
               ],
             };
@@ -4710,7 +4710,7 @@ async function main() {
             content: [
               {
                 type: "text" as const,
-                text: `👥 ${collabCount} collaborator${collabCount === 1 ? "" : "s"} on "${result.project?.name || "this project"}"\n\n${collabLines.join("\n\n")}\n\n💡 Use tasks_create or tasks_assign to assign tasks`,
+                text: `👥 ${collabCount} collaborator${collabCount === 1 ? "" : "s"} on "${result.project?.name || "this project"}"\n\n${collabLines.join("\n\n")}\n\n💡 Use cf_tools with query "assign task" (or "create task") to assign or create tasks`,
               },
             ],
           };
