@@ -256,3 +256,96 @@ describe("searchTools", () => {
     }
   });
 });
+
+describe("buildGatewayTool", () => {
+  it("is named cf_tools and states the hidden count", async () => {
+    const { buildGatewayTool } = await import("../src/tool-registry.js");
+    const gw = buildGatewayTool(59);
+    expect(gw.name).toBe("cf_tools");
+    expect(gw.description).toContain("59");
+  });
+
+  it("tells the agent that unlisted capabilities live here", async () => {
+    // This sentence is the recovery path for already-installed CLAUDE.md files
+    // that name a now-hidden tool. Losing it silently breaks those users.
+    const { buildGatewayTool } = await import("../src/tool-registry.js");
+    expect(buildGatewayTool(59).description.toLowerCase()).toContain("cannot find");
+  });
+
+  it("exposes exactly query, name and args", async () => {
+    const { buildGatewayTool } = await import("../src/tool-registry.js");
+    const schema = buildGatewayTool(59).inputSchema as {
+      properties: Record<string, unknown>;
+    };
+    expect(Object.keys(schema.properties).sort()).toEqual(["args", "name", "query"]);
+  });
+});
+
+describe("visibleTools", () => {
+  const all: ToolDef[] = [
+    ...CORE_TOOL_NAMES.map((n) => tool(n)),
+    tool("memory_git_sync"),
+    tool("skills_run"),
+  ];
+
+  it("returns core plus the gateway in lean mode", async () => {
+    const { visibleTools } = await import("../src/tool-registry.js");
+    const visible = visibleTools(all, {});
+    expect(visible).toHaveLength(CORE_TOOL_NAMES.length + 1);
+    expect(visible.map((t) => t.name)).toContain("cf_tools");
+    expect(visible.map((t) => t.name)).not.toContain("memory_git_sync");
+  });
+
+  it("returns every tool and no gateway in full mode", async () => {
+    const { visibleTools } = await import("../src/tool-registry.js");
+    const visible = visibleTools(all, { CONTEXTFORGE_TOOLS: "full" });
+    expect(visible).toHaveLength(all.length);
+    expect(visible.map((t) => t.name)).not.toContain("cf_tools");
+    expect(visible.map((t) => t.name)).toContain("memory_git_sync");
+  });
+
+  it("puts the gateway last so core tools are read first", async () => {
+    const { visibleTools } = await import("../src/tool-registry.js");
+    const visible = visibleTools(all, {});
+    expect(visible[visible.length - 1].name).toBe("cf_tools");
+  });
+
+  it("keeps the visible core under the hard ceiling", async () => {
+    const { MAX_CORE_TOOLS } = await import("../src/tool-registry.js");
+    expect(CORE_TOOL_NAMES.length).toBeLessThanOrEqual(MAX_CORE_TOOLS);
+  });
+});
+
+describe("CfToolsInputSchema", () => {
+  it("accepts a search call", async () => {
+    const { CfToolsInputSchema } = await import("../src/types.js");
+    expect(CfToolsInputSchema.safeParse({ query: "git commits" }).success).toBe(true);
+  });
+
+  it("accepts an execute call", async () => {
+    const { CfToolsInputSchema } = await import("../src/types.js");
+    expect(
+      CfToolsInputSchema.safeParse({ name: "memory_git_commits", args: { limit: 5 } }).success,
+    ).toBe(true);
+  });
+
+  it("accepts an execute call with no args", async () => {
+    const { CfToolsInputSchema } = await import("../src/types.js");
+    expect(CfToolsInputSchema.safeParse({ name: "memory_stats" }).success).toBe(true);
+  });
+
+  it("rejects passing both query and name", async () => {
+    const { CfToolsInputSchema } = await import("../src/types.js");
+    expect(CfToolsInputSchema.safeParse({ query: "git", name: "memory_git_sync" }).success).toBe(false);
+  });
+
+  it("rejects passing neither", async () => {
+    const { CfToolsInputSchema } = await import("../src/types.js");
+    expect(CfToolsInputSchema.safeParse({}).success).toBe(false);
+  });
+
+  it("rejects an empty query", async () => {
+    const { CfToolsInputSchema } = await import("../src/types.js");
+    expect(CfToolsInputSchema.safeParse({ query: "" }).success).toBe(false);
+  });
+});

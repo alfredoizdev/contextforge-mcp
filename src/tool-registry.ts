@@ -280,3 +280,54 @@ export function searchTools<T extends ToolDef>(hidden: T[], query: string, limit
     .slice(0, limit)
     .map((s) => s.tool);
 }
+
+/**
+ * The single gateway tool. One tool with two modes rather than two tools: it
+ * saves a schema and removes the "which of the two do I call?" ambiguity.
+ */
+export function buildGatewayTool(hiddenCount: number): ToolDef {
+  return {
+    name: GATEWAY_TOOL_NAME,
+    description:
+      `Discover and run ${hiddenCount} additional ContextForge capabilities that are not in your tool list: ` +
+      "git sync and history, spaces, projects, skills, routines, snapshots, import/export, task editing, and collaboration. " +
+      "If you cannot find a ContextForge capability in your tool list, search for it HERE before concluding it does not exist. " +
+      "Two modes: pass `query` with a plain-language description to search (returns full, ready-to-call schemas of the best matches), " +
+      "or pass `name` plus `args` to run one.",
+    annotations: {
+      title: "ContextForge Tools",
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+      openWorldHint: false,
+    },
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        query: {
+          type: "string",
+          description:
+            "Plain-language description of the capability you need, e.g. 'sync git commits' or 'forget an outdated memory'. Returns full schemas of the best matches.",
+        },
+        name: {
+          type: "string",
+          description: "Exact tool name to execute, as returned by a previous `query` call.",
+        },
+        args: {
+          type: "object",
+          description: "Arguments for the tool named in `name`.",
+        },
+      },
+    },
+  };
+}
+
+/** What the client actually sees: core + gateway in lean mode, everything in full. */
+export function visibleTools<T extends ToolDef>(
+  all: T[],
+  env: Record<string, string | undefined>,
+): (T | ToolDef)[] {
+  if (!isLeanMode(env)) return all;
+  const { core, hidden } = splitTools(all);
+  return [...core, buildGatewayTool(hidden.length)];
+}
