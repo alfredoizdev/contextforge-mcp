@@ -358,7 +358,7 @@ const TOOLS = [
   {
     name: "memory_ingest",
     description:
-      "**Save important context to persistent memory — be proactive.** Call this WHENEVER you learn information that would be valuable in a future conversation: project decisions ('we chose Postgres because X'), architectural choices, user preferences, debugging insights, recurring patterns, deadlines, stakeholder context, or any 'remember this' / 'save this' / 'note that' style request from the user. Heuristic: if you would be sad to lose this fact when the conversation ends, ingest it. Better to over-save than to under-save — the memory_query semantic search will surface what's relevant later. Always pass meaningful `title` and `tags` so the item is discoverable. Set `deduplicate:false` to save even if identical content already exists. **ROUTE BY TOPIC:** pass `space:\"<name>\"` matching the memory's topic so it lands in the right space instead of the catch-all default. If you don't yet know the project's spaces, call `memory_list_spaces` once and reuse the result. Saving without `space:` piles everything into one default space — avoid it in multi-space projects.",
+      "**Save important context to persistent memory — be proactive.** Call this WHENEVER you learn information that would be valuable in a future conversation: project decisions ('we chose Postgres because X'), architectural choices, user preferences, debugging insights, recurring patterns, deadlines, stakeholder context, or any 'remember this' / 'save this' / 'note that' style request from the user. Heuristic: if you would be sad to lose this fact when the conversation ends, ingest it. Better to over-save than to under-save — the memory_query semantic search will surface what's relevant later. Always pass meaningful `title` and `tags` so the item is discoverable. Set `deduplicate:false` to save even if identical content already exists. **ROUTE BY TOPIC:** pass `space:\"<name>\"` matching the memory's topic so it lands in the right space instead of the catch-all default. If you don't yet know the project's spaces, call `cf_tools` with query \"list spaces\" once and reuse the result. Saving without `space:` piles everything into one default space — avoid it in multi-space projects.",
     annotations: {
       title: "Save to Memory",
       readOnlyHint: false,
@@ -2586,7 +2586,7 @@ async function main() {
               content: [
                 {
                   type: "text" as const,
-                  text: `🔍 No results found for "${input.query}"\n\n💡 Try different keywords or check memory_list_items`,
+                  text: `🔍 No results found for "${input.query}"\n\n💡 Try different keywords, or use cf_tools with query "list items" to browse everything`,
                 },
               ],
             };
@@ -2734,7 +2734,7 @@ async function main() {
                 type: "text" as const,
                 text: formatResponse({
                   message: `📁 Project "${project.name}" created successfully!`,
-                  hint: "Use memory_create_space to add spaces to this project",
+                  hint: "Use cf_tools with query \"create space\" to add spaces to this project",
                   details: {
                     id: project.id,
                     name: project.name,
@@ -2795,7 +2795,7 @@ async function main() {
               content: [
                 {
                   type: "text" as const,
-                  text: `📂 No spaces found${projectFilter ? ` in project "${projectFilter}"` : ""}\n\n💡 Use memory_create_space to create a new space`,
+                  text: `📂 No spaces found${projectFilter ? ` in project "${projectFilter}"` : ""}\n\n💡 Use cf_tools with query "create space" to create one`,
                 },
               ],
             };
@@ -3764,7 +3764,7 @@ async function main() {
                         success: false,
                         message: "Please specify which project to link:",
                         available_projects: error.details?.available_projects,
-                        hint: "Call memory_link_project with project_name set to one of these, or use create_new: true to create a new project",
+                        hint: "Call cf_tools with name:\"memory_link_project\" and args:{project_name} set to one of these, or args:{create_new:true} to create a new project",
                       },
                       null,
                       2,
@@ -3836,8 +3836,8 @@ async function main() {
                     config_file: result.config_path,
                     message: result.message,
                     hint: result.linked
-                      ? "Use memory_unlink_project to remove the link"
-                      : "Use memory_link_project to link a project",
+                      ? "Use cf_tools with query \"unlink project\" to remove the link"
+                      : "Use cf_tools with query \"link project\" to link one",
                   },
                   null,
                   2,
