@@ -4,6 +4,7 @@ import {
   GATEWAY_TOOL_NAME,
   categoryOf,
   isLeanMode,
+  searchTools,
   splitTools,
   type ToolDef,
 } from "../src/tool-registry.js";
@@ -98,5 +99,61 @@ describe("splitTools", () => {
     const { core, hidden } = splitTools([tool("skills_run")]);
     expect(core).toEqual([]);
     expect(hidden).toHaveLength(1);
+  });
+});
+
+const HIDDEN: ToolDef[] = [
+  { name: "memory_git_commits", description: "List commits stored in memory from connected repositories", inputSchema: {} },
+  { name: "memory_git_sync", description: "Sync a connected git repository into memory", inputSchema: {} },
+  { name: "memory_forget", description: "Mark a knowledge item as no longer applicable", inputSchema: {} },
+  { name: "tasks_create", description: "Create a new task or issue", inputSchema: {} },
+  { name: "skills_run", description: "Execute a stored skill", inputSchema: {} },
+  { name: "memory_export", description: "Export all knowledge items to a file", inputSchema: {} },
+];
+
+describe("searchTools", () => {
+  it("finds tools by exact name fragment", () => {
+    const names = searchTools(HIDDEN, "git commits").map((t) => t.name);
+    expect(names[0]).toBe("memory_git_commits");
+  });
+
+  it("finds every tool in a category when searching the category name", () => {
+    const names = searchTools(HIDDEN, "git").map((t) => t.name);
+    expect(names).toContain("memory_git_commits");
+    expect(names).toContain("memory_git_sync");
+  });
+
+  it("finds a tool through a Spanish synonym with no lexical overlap", () => {
+    const names = searchTools(HIDDEN, "olvidar algo que ya no aplica").map((t) => t.name);
+    expect(names).toContain("memory_forget");
+  });
+
+  it("finds a tool through an English synonym with no lexical overlap", () => {
+    const names = searchTools(HIDDEN, "this memory is outdated").map((t) => t.name);
+    expect(names).toContain("memory_forget");
+  });
+
+  it("matches words in the description", () => {
+    const names = searchTools(HIDDEN, "issue").map((t) => t.name);
+    expect(names).toContain("tasks_create");
+  });
+
+  it("returns an empty array when nothing matches", () => {
+    expect(searchTools(HIDDEN, "zzzznomatchzzzz")).toEqual([]);
+  });
+
+  it("respects the limit and defaults to 5", () => {
+    expect(searchTools(HIDDEN, "memory", 2)).toHaveLength(2);
+    expect(searchTools(HIDDEN, "memory").length).toBeLessThanOrEqual(5);
+  });
+
+  it("ranks a name match above a description-only match", () => {
+    const names = searchTools(HIDDEN, "export").map((t) => t.name);
+    expect(names[0]).toBe("memory_export");
+  });
+
+  it("ignores very short noise words", () => {
+    const names = searchTools(HIDDEN, "a of the git").map((t) => t.name);
+    expect(names).toContain("memory_git_sync");
   });
 });
