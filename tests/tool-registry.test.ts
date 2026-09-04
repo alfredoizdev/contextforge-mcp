@@ -1,4 +1,6 @@
 import { describe, it, expect } from "vitest";
+import fs from "fs";
+import path from "path";
 import {
   CORE_TOOL_NAMES,
   GATEWAY_TOOL_NAME,
@@ -14,6 +16,41 @@ const tool = (name: string): ToolDef => ({
   description: `description for ${name}`,
   inputSchema: { type: "object", properties: {} },
 });
+
+/**
+ * Extract the real TOOLS array from src/index.ts (59 tools, 10 core + 59 hidden).
+ * Replicates the approach used by search-probe.cjs to ensure test and probe
+ * use the same tool set and catch regressions at the 59-tool scale.
+ *
+ * Note: Does NOT import src/index.ts to avoid triggering main() at module load.
+ */
+function extractRealTools(): ToolDef[] {
+  const indexPath = path.resolve(process.cwd(), "src/index.ts");
+  const s = fs.readFileSync(indexPath, "utf8");
+  const start = s.indexOf("const TOOLS");
+  let i = s.indexOf("[", start),
+    d = 0,
+    end = i;
+  for (let k = i; k < s.length; k++) {
+    if (s[k] === "[") d++;
+    else if (s[k] === "]") {
+      d--;
+      if (d === 0) {
+        end = k;
+        break;
+      }
+    }
+  }
+  const block = s.slice(i, end + 1);
+  const marks = [...block.matchAll(/name:\s*"([a-z_]+)"/g)];
+  return marks.map((m, x) => {
+    const a = m.index!;
+    const b = x + 1 < marks.length ? marks[x + 1].index! : block.length;
+    const sl = block.slice(a, b);
+    const de = sl.match(/description:\s*\n?\s*"((?:[^"\\]|\\.)*)"/);
+    return { name: m[1], description: de ? de[1] : "", inputSchema: {} };
+  });
+}
 
 describe("CORE_TOOL_NAMES", () => {
   it("is exactly the 10 agreed core tools", () => {
@@ -186,24 +223,36 @@ describe("searchTools", () => {
     expect(names).toEqual(names2);
   });
 
-  it("rejects short 3-char noise terms to prevent accidental matches", () => {
+  it("rejects short 3-char noise terms to prevent accidental matches (against real 59 tools)", () => {
     // This test locks in the noise reduction fix from round 2.
     // Short 3-char terms should NOT match dozens of tools via substring.
-    // The fixture has tools with many substrings that contain noise terms:
-    // - "ate" appears in: create, delete, update, relate, activate, share, etc. (words ending in -ate)
-    // - "pro" appears in: programar, project, etc.
-    // - "tar" appears in: exportar, importar, listar, crear tarea, etc.
-    // - "del" appears in: delegar, delete, etc.
-    // These should NOT match because they're only 3 chars and fail all tiers.
+    // CRITICAL: This test runs against the REAL 59 hidden tools (extracted from src/index.ts),
+    // not the 7-tool HIDDEN fixture. The bug was measured at 59-tool scale and the test must
+    // catch it there, not pass silently with fewer collisions.
+    // The fix guards substring matching with term.length >= 4.
+    // If this test passes when the guards are reverted to >= 3, the test is broken.
+    //
+    // Baseline (before fix, at 59-tool scale):
+    // - "tar" (3): 26 matches
+    // - "ate" (3): 22 matches
+    // - "pro" (3): 18 matches
+    // - "del" (3): 12 matches
+    const allTools = extractRealTools();
+    const { hidden } = splitTools(allTools);
+    expect(hidden.length).toBe(59); // Verify we have the real set
+
     const noiseQueries = [
-      { query: "tar", maxMatches: 3 },  // was 26 before fix
-      { query: "ate", maxMatches: 2 },  // was 22 before fix
-      { query: "pro", maxMatches: 2 },  // was 18 before fix
-      { query: "del", maxMatches: 3 },  // was 12 before fix
+      { query: "tar", maxMatches: 2 }, // 3-char: should match only via segment if at all
+      { query: "ate", maxMatches: 2 }, // 3-char: should match only via segment if at all
+      { query: "pro", maxMatches: 2 }, // 3-char: should match only via segment if at all
+      { query: "del", maxMatches: 3 }, // 3-char: should match only via segment if at all
     ];
     for (const { query, maxMatches } of noiseQueries) {
-      const results = searchTools(HIDDEN, query, 59); // get all possible matches
-      expect(results.length).toBeLessThanOrEqual(maxMatches);
+      const results = searchTools(hidden, query, 59);
+      expect(results.length).toBeLessThanOrEqual(
+        maxMatches,
+        `"${query}" matched ${results.length} tools (max ${maxMatches}): ${results.map((t) => t.name).join(", ")}`
+      );
     }
   });
 });
