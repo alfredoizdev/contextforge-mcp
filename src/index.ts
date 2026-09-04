@@ -52,6 +52,7 @@ import {
   RoutinesToggleInputSchema,
   RoutinesRunNowInputSchema,
   RoutinesDeleteInputSchema,
+  CfToolsInputSchema,
   parseArrayInput,
 } from "./types.js";
 import type { Config } from "./types.js";
@@ -77,6 +78,12 @@ import {
   resolveLinkedProjectSpaceId,
   resolveLinkedProjectSpaceIdReadOnly,
 } from "./resolve-space.js";
+import {
+  GATEWAY_TOOL_NAME,
+  splitTools,
+  searchTools,
+  visibleTools,
+} from "./tool-registry.js";
 
 const require = createRequire(import.meta.url);
 const pkg = require("../package.json");
@@ -2400,10 +2407,12 @@ async function main() {
     },
   );
 
-  // List available tools
+  // List available tools. In lean mode (the default) only the core set plus the
+  // cf_tools gateway are exposed; CONTEXTFORGE_TOOLS=full restores all of them.
   server.setRequestHandler(ListToolsRequestSchema, async () => {
-    logInfo(`Tools requested (${TOOLS.length} available)`);
-    return { tools: TOOLS };
+    const tools = visibleTools(TOOLS, process.env);
+    logInfo(`Tools requested (${tools.length} exposed of ${TOOLS.length} total)`);
+    return { tools };
   });
 
   // Handle tool calls
@@ -2416,6 +2425,68 @@ async function main() {
       void presence.ensureRegistered();
 
       switch (name) {
+        case "cf_tools": {
+          const input = CfToolsInputSchema.parse(args);
+          const { hidden } = splitTools(TOOLS);
+
+          // Discovery: return full schemas so the agent can call on the next turn.
+          if (input.query) {
+            const matches = searchTools(hidden, input.query, 5);
+            return {
+              content: [
+                {
+                  type: "text" as const,
+                  text: JSON.stringify(
+                    {
+                      matches: matches.map((t) => ({
+                        name: t.name,
+                        description: t.description,
+                        inputSchema: t.inputSchema,
+                      })),
+                      hint: matches.length
+                        ? `Call cf_tools again with name:"<one of the above>" and args:{...} to run it. If none of these fit, search another category: memory, tasks, git, skills, routines, snapshots, sessions, collaboration.`
+                        : `No match for "${input.query}". Try other words, or a category: memory, tasks, git, skills, routines, snapshots, sessions, collaboration.`,
+                    },
+                    null,
+                    2,
+                  ),
+                },
+              ],
+            };
+          }
+
+          // Execution: delegate straight back into this same switch.
+          if (input.name === GATEWAY_TOOL_NAME) {
+            return {
+              content: [
+                {
+                  type: "text" as const,
+                  text: JSON.stringify({ error: "cf_tools cannot invoke itself" }),
+                },
+              ],
+              isError: true,
+            };
+          }
+          if (!hidden.some((t) => t.name === input.name)) {
+            const suggestions = searchTools(hidden, input.name ?? "", 3).map((t) => t.name);
+            return {
+              content: [
+                {
+                  type: "text" as const,
+                  text: JSON.stringify({
+                    error: `Unknown tool "${input.name}".`,
+                    did_you_mean: suggestions,
+                    hint: "Call cf_tools with `query` to search available tools.",
+                  }),
+                },
+              ],
+              isError: true,
+            };
+          }
+          return await originalHandler({
+            params: { name: input.name, arguments: input.args ?? {} },
+          });
+        }
         case "memory_ingest": {
           const input = IngestInputSchema.parse(args);
           // Capture the agent's routing intent BEFORE we resolve/pre-fill a
