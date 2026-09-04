@@ -871,3 +871,17 @@ export interface AgentSession {
   stale?: boolean;
   seconds_since_heartbeat?: number;
 }
+
+// ============ Gateway Tool Input Schema ============
+
+export const CfToolsInputSchema = z
+  .object({
+    query: z.string().min(1, "Query must not be empty").optional(),
+    name: z.string().min(1, "Tool name must not be empty").optional(),
+    args: z.record(z.unknown()).optional(),
+  })
+  .refine((v) => Boolean(v.query) !== Boolean(v.name), {
+    message: "Pass exactly one of `query` (to search) or `name` (to execute)",
+  });
+
+export type CfToolsInput = z.infer<typeof CfToolsInputSchema>;

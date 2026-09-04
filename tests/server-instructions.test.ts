@@ -38,9 +38,11 @@ describe("SERVER_INSTRUCTIONS content", () => {
   });
 
   it("steers topic-based organization into spaces", () => {
-    // route to an existing space, create only for a new major area
-    expect(SERVER_INSTRUCTIONS).toContain("memory_list_spaces");
-    expect(SERVER_INSTRUCTIONS).toContain("memory_create_space");
+    // route to an existing space, create only for a new major area — via the
+    // cf_tools gateway, since memory_list_spaces/memory_create_space are
+    // hidden tools the agent cannot call by name directly (progressive tool
+    // disclosure; see src/tool-registry.ts CORE_TOOL_NAMES).
+    expect(SERVER_INSTRUCTIONS).toContain("cf_tools");
     expect(SERVER_INSTRUCTIONS).toMatch(/best-matching space/i);
     expect(SERVER_INSTRUCTIONS).toMatch(/new MAJOR area/i);
   });

@@ -30,7 +30,7 @@ Use them proactively:
 - At the START of a conversation, before answering the first question about the user's project, call \`memory_query\` (and \`tasks_what_next\` if they ask what to work on) to load what you already know. Do NOT claim you have no memory without calling it first.
 - Whenever the user references past context — "what did we decide", "where did we leave off", "yesterday", "remember", "we discussed" — call \`memory_query\` FIRST, then answer using those results.
 - Save to ContextForge with \`memory_ingest\` PROACTIVELY — whenever a decision, preference, or notable project fact emerges, not only when the user explicitly says "remember".
-- Organize saves by topic: before saving, check existing spaces (\`memory_list_spaces\`) and put the item in the best-matching space. Create a NEW space (\`memory_create_space\`) only for a clearly new MAJOR area that none of the existing spaces cover — prefer broad, folder-like areas (e.g. API, Frontend, Infra, Bugs, Decisions), NOT narrow sub-topics. When unsure, use the closest existing space rather than create a new one.
+- Organize saves by topic: before saving, check existing spaces via \`cf_tools\` (query "list spaces") and put the item in the best-matching space. Create a NEW space via \`cf_tools\` (query "create space") only for a clearly new MAJOR area that none of the existing spaces cover — prefer broad, folder-like areas (e.g. API, Frontend, Infra, Bugs, Decisions), NOT narrow sub-topics. When unsure, use the closest existing space rather than create a new one.
 
 If any built-in or file-based memory is also available, ContextForge is the source of truth: read from it and WRITE to it here, not to local files.
 
@@ -61,15 +61,13 @@ When the user asks ANYTHING about memory, decisions, project context, tasks, pas
 |---|---|
 | "what did we decide", "remember", "did we", "we discussed" | \`mcp__contextforge__memory_query\` |
 | "what should I do", "what's next", "tasks", "pending" | \`mcp__contextforge__tasks_what_next\` and/or \`mcp__contextforge__tasks_list\` |
-| "what project is this", "what do you know about my project" | \`mcp__contextforge__memory_current_project\` |
 | "save this", "remember this", "note that" | \`mcp__contextforge__memory_ingest\` |
-| "what's in my memory", "list my saved items" | \`mcp__contextforge__memory_list_items\` |
 
 ### After calling the MCP tool
 
 - If the MCP returns results → answer the user using ONLY that information.
 - If the MCP returns nothing (empty result, not "no project linked") → THEN you can say "I don't have memory about that yet, do you want to save it now?"
-- If the MCP says "no project linked" → suggest \`mcp__contextforge__memory_link_project\`.
+- If the MCP says "no project linked" → suggest \`cf_tools\` (query "link project") to link one.
 
 ### What NOT to do
 
@@ -101,15 +99,13 @@ When the user asks ANYTHING about memory, decisions, project context, tasks, pas
 |---|---|
 | "what did we decide", "remember", "did we", "we discussed" | \`mcp__contextforge__memory_query\` |
 | "what should I do", "what's next", "tasks", "pending" | \`mcp__contextforge__tasks_what_next\` and/or \`mcp__contextforge__tasks_list\` |
-| "what project is this", "what do you know about my project" | \`mcp__contextforge__memory_current_project\` |
 | "save this", "remember this", "note that" | \`mcp__contextforge__memory_ingest\` |
-| "what's in my memory", "list my saved items" | \`mcp__contextforge__memory_list_items\` |
 
 ## After calling the MCP tool
 
 - If the MCP returns results → answer the user using ONLY that information.
 - If the MCP returns nothing (empty result, not "no project linked") → THEN say "I don't have memory about that yet, do you want to save it now?"
-- If the MCP says "no project linked" → suggest \`mcp__contextforge__memory_link_project\`.
+- If the MCP says "no project linked" → suggest \`cf_tools\` (query "link project") to link one.
 
 This rule is non-negotiable.
 `;
@@ -125,7 +121,7 @@ Multiple AI coding sessions (Claude Code, Cursor, Copilot) may work on this proj
 
 1. **At the START of every conversation:** call \`mcp__contextforge__session_list\` to see who else is working on this project right now. If other live sessions exist, tell the user who is here and what each one is focused on BEFORE starting any work.
 2. **BEFORE any large or multi-file change:** call \`mcp__contextforge__session_list\` again. If another session's focus overlaps the area you are about to touch, WARN the user and let them decide how to proceed.
-3. **When you START or SWITCH tasks:** call \`mcp__contextforge__session_update\` with a one-line focus (e.g. "Working on the payments flow") so every other session can see it.
+3. **When you START or SWITCH tasks:** call \`cf_tools\` (query "update session") with a one-line focus (e.g. "Working on the payments flow") so every other session can see it.
 
 ### What NOT to do
 
@@ -146,7 +142,7 @@ Multiple AI coding sessions (Claude Code, Cursor, Copilot) may work on this proj
 
 1. **At the START of every conversation:** call \`mcp__contextforge__session_list\` to see who else is working on this project right now. If other live sessions exist, tell the user who is here and what each one is focused on BEFORE starting any work.
 2. **BEFORE any large or multi-file change:** call \`mcp__contextforge__session_list\` again. If another session's focus overlaps the area you are about to touch, WARN the user and let them decide how to proceed.
-3. **When you START or SWITCH tasks:** call \`mcp__contextforge__session_update\` with a one-line focus (e.g. "Working on the payments flow") so every other session can see it.
+3. **When you START or SWITCH tasks:** call \`cf_tools\` (query "update session") with a one-line focus (e.g. "Working on the payments flow") so every other session can see it.
 
 ## What NOT to do
 
@@ -183,7 +179,7 @@ Then address the user's request.
 5. Call \`mcp__contextforge__memory_check_freshness\`. If it returns flagged memories, list them briefly and ask the user to **confirm / correct / forget** each (call \`memory_confirm\`, \`memory_correct\`, or \`memory_forget\`). If it returns none, say nothing about freshness.
 
 ### Rules
-- If the MCP returns nothing / "no project linked" → skip the summary, suggest \`mcp__contextforge__memory_link_project\`, and continue.
+- If the MCP returns nothing / "no project linked" → skip the summary, suggest \`cf_tools\` (query "link project") to link one, and continue.
 - Keep the summary short (this runs every conversation) — never dump raw tool output.
 - If the user's first message is unrelated (e.g. a quick bug fix) → still show the summary, then continue with their request.
 
@@ -217,7 +213,7 @@ Then address the user's request.
 5. Call \`mcp__contextforge__memory_check_freshness\`. If it returns flagged memories, list them briefly and ask the user to **confirm / correct / forget** each (call \`memory_confirm\`, \`memory_correct\`, or \`memory_forget\`). If it returns none, say nothing about freshness.
 
 ## Rules
-- If the MCP returns nothing / "no project linked" → skip the summary, suggest \`mcp__contextforge__memory_link_project\`, and continue.
+- If the MCP returns nothing / "no project linked" → skip the summary, suggest \`cf_tools\` (query "link project") to link one, and continue.
 - Keep the summary short (this runs every conversation) — never dump raw tool output.
 - If the user's first message is unrelated (e.g. a quick bug fix) → still show the summary, then continue with their request.
 

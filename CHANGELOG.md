@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.11.0
+
+- **Default tool surface reduced from 69 to 11.** The server now exposes 10 core tools — `memory_query`, `memory_ingest`, `memory_check_freshness`, `memory_confirm`, `memory_correct`, `memory_forget`, `tasks_list`, `tasks_what_next`, `session_list`, `memory_help` — plus one gateway tool, `cf_tools`. No capability was removed: all 59 other tools remain fully callable, either directly by name (`cf_tools({ name, args })`) or by natural-language search (`cf_tools({ query })`), which matches against tool names, categories, and a hand-written synonym map and returns full, ready-to-call schemas for the best matches. Search covers both English and Spanish (e.g. "olvidar un recuerdo viejo" surfaces `memory_forget`).
+- New `CONTEXTFORGE_TOOLS` environment variable. Default is `lean` (the 11-tool surface above); set to `full` to restore the exact pre-0.11.0 behavior of exposing all 69 tools directly.
+- Why: at 69 tools, ContextForge alone exceeded Cursor's 40-tool cap and contributed to the accuracy degradation several clients show past ~50 tools, on top of the ~15,000 tokens of schema loaded into every session's context. The lean default measures at ~3,500 tokens (~77% reduction) while every tool stays one `cf_tools` call away.
+- `init`-generated `CLAUDE.md`/`.cursorrules` rules and the server's `initialize` instructions no longer name now-hidden tools directly; they route through `cf_tools` instead (e.g. "call `cf_tools` with query 'link project'").
+
 ## 0.7.0
 
 - New `memory_move_item` tool — move a knowledge item to a different space by id or title, with the target space given by name or UUID. Completes the topic-organization feature: memory auto-organizes into topic spaces (0.6.0) and mis-filed items can now be moved. Cross-project moves within your org are allowed. (Requires the `move-item` backend endpoint to be deployed.)

@@ -52,6 +52,7 @@ import {
   RoutinesToggleInputSchema,
   RoutinesRunNowInputSchema,
   RoutinesDeleteInputSchema,
+  CfToolsInputSchema,
   parseArrayInput,
 } from "./types.js";
 import type { Config } from "./types.js";
@@ -77,6 +78,12 @@ import {
   resolveLinkedProjectSpaceId,
   resolveLinkedProjectSpaceIdReadOnly,
 } from "./resolve-space.js";
+import {
+  GATEWAY_TOOL_NAME,
+  splitTools,
+  searchTools,
+  visibleTools,
+} from "./tool-registry.js";
 
 const require = createRequire(import.meta.url);
 const pkg = require("../package.json");
@@ -351,7 +358,7 @@ const TOOLS = [
   {
     name: "memory_ingest",
     description:
-      "**Save important context to persistent memory — be proactive.** Call this WHENEVER you learn information that would be valuable in a future conversation: project decisions ('we chose Postgres because X'), architectural choices, user preferences, debugging insights, recurring patterns, deadlines, stakeholder context, or any 'remember this' / 'save this' / 'note that' style request from the user. Heuristic: if you would be sad to lose this fact when the conversation ends, ingest it. Better to over-save than to under-save — the memory_query semantic search will surface what's relevant later. Always pass meaningful `title` and `tags` so the item is discoverable. Set `deduplicate:false` to save even if identical content already exists. **ROUTE BY TOPIC:** pass `space:\"<name>\"` matching the memory's topic so it lands in the right space instead of the catch-all default. If you don't yet know the project's spaces, call `memory_list_spaces` once and reuse the result. Saving without `space:` piles everything into one default space — avoid it in multi-space projects.",
+      "**Save important context to persistent memory — be proactive.** Call this WHENEVER you learn information that would be valuable in a future conversation: project decisions ('we chose Postgres because X'), architectural choices, user preferences, debugging insights, recurring patterns, deadlines, stakeholder context, or any 'remember this' / 'save this' / 'note that' style request from the user. Heuristic: if you would be sad to lose this fact when the conversation ends, ingest it. Better to over-save than to under-save — the memory_query semantic search will surface what's relevant later. Always pass meaningful `title` and `tags` so the item is discoverable. Set `deduplicate:false` to save even if identical content already exists. **ROUTE BY TOPIC:** pass `space:\"<name>\"` matching the memory's topic so it lands in the right space instead of the catch-all default. If you don't yet know the project's spaces, call `cf_tools` with query \"list spaces\" once and reuse the result. Saving without `space:` piles everything into one default space — avoid it in multi-space projects.",
     annotations: {
       title: "Save to Memory",
       readOnlyHint: false,
@@ -2400,10 +2407,12 @@ async function main() {
     },
   );
 
-  // List available tools
+  // List available tools. In lean mode (the default) only the core set plus the
+  // cf_tools gateway are exposed; CONTEXTFORGE_TOOLS=full restores all of them.
   server.setRequestHandler(ListToolsRequestSchema, async () => {
-    logInfo(`Tools requested (${TOOLS.length} available)`);
-    return { tools: TOOLS };
+    const tools = visibleTools(TOOLS, process.env);
+    logInfo(`Tools requested (${tools.length} exposed of ${TOOLS.length} total)`);
+    return { tools };
   });
 
   // Handle tool calls
@@ -2416,6 +2425,68 @@ async function main() {
       void presence.ensureRegistered();
 
       switch (name) {
+        case "cf_tools": {
+          const input = CfToolsInputSchema.parse(args);
+          const { hidden } = splitTools(TOOLS);
+
+          // Discovery: return full schemas so the agent can call on the next turn.
+          if (input.query) {
+            const matches = searchTools(hidden, input.query, 5);
+            return {
+              content: [
+                {
+                  type: "text" as const,
+                  text: JSON.stringify(
+                    {
+                      matches: matches.map((t) => ({
+                        name: t.name,
+                        description: t.description,
+                        inputSchema: t.inputSchema,
+                      })),
+                      hint: matches.length
+                        ? `Call cf_tools again with name:"<one of the above>" and args:{...} to run it. If none of these fit, search another category: memory, tasks, git, skills, routines, snapshots, sessions, collaboration.`
+                        : `No match for "${input.query}". Try other words, or a category: memory, tasks, git, skills, routines, snapshots, sessions, collaboration.`,
+                    },
+                    null,
+                    2,
+                  ),
+                },
+              ],
+            };
+          }
+
+          // Execution: delegate straight back into this same switch.
+          if (input.name === GATEWAY_TOOL_NAME) {
+            return {
+              content: [
+                {
+                  type: "text" as const,
+                  text: JSON.stringify({ error: "cf_tools cannot invoke itself" }),
+                },
+              ],
+              isError: true,
+            };
+          }
+          if (!hidden.some((t) => t.name === input.name)) {
+            const suggestions = searchTools(hidden, input.name ?? "", 3).map((t) => t.name);
+            return {
+              content: [
+                {
+                  type: "text" as const,
+                  text: JSON.stringify({
+                    error: `Unknown tool "${input.name}".`,
+                    did_you_mean: suggestions,
+                    hint: "Call cf_tools with `query` to search available tools.",
+                  }),
+                },
+              ],
+              isError: true,
+            };
+          }
+          return await originalHandler({
+            params: { name: input.name, arguments: input.args ?? {} },
+          });
+        }
         case "memory_ingest": {
           const input = IngestInputSchema.parse(args);
           // Capture the agent's routing intent BEFORE we resolve/pre-fill a
@@ -2515,7 +2586,7 @@ async function main() {
               content: [
                 {
                   type: "text" as const,
-                  text: `🔍 No results found for "${input.query}"\n\n💡 Try different keywords or check memory_list_items`,
+                  text: `🔍 No results found for "${input.query}"\n\n💡 Try different keywords, or use cf_tools with query "list items" to browse everything`,
                 },
               ],
             };
@@ -2626,7 +2697,7 @@ async function main() {
               content: [
                 {
                   type: "text" as const,
-                  text: "🗂️ No projects yet\n\n💡 Use memory_create_project to create your first project",
+                  text: "🗂️ No projects yet\n\n💡 Use cf_tools with query \"create project\" to create your first project",
                 },
               ],
             };
@@ -2663,7 +2734,7 @@ async function main() {
                 type: "text" as const,
                 text: formatResponse({
                   message: `📁 Project "${project.name}" created successfully!`,
-                  hint: "Use memory_create_space to add spaces to this project",
+                  hint: "Use cf_tools with query \"create space\" to add spaces to this project",
                   details: {
                     id: project.id,
                     name: project.name,
@@ -2724,7 +2795,7 @@ async function main() {
               content: [
                 {
                   type: "text" as const,
-                  text: `📂 No spaces found${projectFilter ? ` in project "${projectFilter}"` : ""}\n\n💡 Use memory_create_space to create a new space`,
+                  text: `📂 No spaces found${projectFilter ? ` in project "${projectFilter}"` : ""}\n\n💡 Use cf_tools with query "create space" to create one`,
                 },
               ],
             };
@@ -3163,7 +3234,7 @@ async function main() {
                         : `📡 No repositories connected`,
                     hint:
                       repoCount === 0
-                        ? "Use memory_git_connect to connect a GitHub repository"
+                        ? "Use cf_tools with query \"connect repo\" to connect a GitHub repository"
                         : undefined,
                   },
                   null,
@@ -3297,7 +3368,7 @@ async function main() {
                         : `📝 No commits synced yet`,
                     hint:
                       commitCount === 0
-                        ? "Use memory_git_sync to sync commits from your repository"
+                        ? "Use cf_tools with query \"sync git\" to sync commits from your repository"
                         : undefined,
                   },
                   null,
@@ -3335,7 +3406,7 @@ async function main() {
                         : `🔀 No pull requests synced yet`,
                     hint:
                       prCount === 0
-                        ? "Use memory_git_sync to sync PRs from your repository"
+                        ? "Use cf_tools with query \"sync git\" to sync PRs from your repository"
                         : undefined,
                   },
                   null,
@@ -3405,7 +3476,7 @@ async function main() {
                         : `🗂️ No snapshots created yet`,
                     hint:
                       snapshotCount === 0
-                        ? "Use memory_snapshot_create to backup your memory state"
+                        ? "Use cf_tools with query \"create snapshot\" to backup your memory state"
                         : undefined,
                   },
                   null,
@@ -3693,7 +3764,7 @@ async function main() {
                         success: false,
                         message: "Please specify which project to link:",
                         available_projects: error.details?.available_projects,
-                        hint: "Call memory_link_project with project_name set to one of these, or use create_new: true to create a new project",
+                        hint: "Call cf_tools with name:\"memory_link_project\" and args:{project_name} set to one of these, or args:{create_new:true} to create a new project",
                       },
                       null,
                       2,
@@ -3765,8 +3836,8 @@ async function main() {
                     config_file: result.config_path,
                     message: result.message,
                     hint: result.linked
-                      ? "Use memory_unlink_project to remove the link"
-                      : "Use memory_link_project to link a project",
+                      ? "Use cf_tools with query \"unlink project\" to remove the link"
+                      : "Use cf_tools with query \"link project\" to link one",
                   },
                   null,
                   2,
@@ -4059,7 +4130,7 @@ async function main() {
             return `[${i.short_id}] ${i.title}\n  ${statusEmoji} ${i.status} | ${priorityLabel} ${i.priority} | 📁 ${i.project?.name || "No project"}${commentInfo}${resolvedBy}${createdBy}${taskUrl}`;
           });
 
-          const responseText = `📋 Found ${issueCount} task${issueCount === 1 ? "" : "s"}\n\n${issueLines.join("\n\n")}\n\n💡 Use tasks_start <issue_id> to begin working on a task`;
+          const responseText = `📋 Found ${issueCount} task${issueCount === 1 ? "" : "s"}\n\n${issueLines.join("\n\n")}\n\n💡 Use cf_tools with query "start task" to begin working on one`;
 
           return {
             content: [
@@ -4115,7 +4186,7 @@ async function main() {
                 text:
                   formatResponse({
                     message: `▶️ Now working on: ${result.issue?.title}`,
-                    hint: "Use tasks_resolve when you complete this task",
+                    hint: "Use cf_tools with query \"resolve task\" when you complete this task",
                     details: {
                       id: result.issue?.id,
                       description: result.issue?.description,
@@ -4200,7 +4271,7 @@ async function main() {
             content: [
               {
                 type: "text" as const,
-                text: `🎯 Next recommended task:\n\n[${result.issue.short_id || result.issue.id.slice(0, 6)}] ${result.issue.title}\n${priorityEmoji} ${result.issue.priority} | 📁 ${result.issue.project?.name || "No project"}${dueDate}${desc}\n\n📊 ${result.pending_count || 0} pending tasks remaining\n\n💡 Use tasks_start ${result.issue.id} to begin working\n\n🔗 ${getTaskDashboardUrl(result.issue.id)}`,
+                text: `🎯 Next recommended task:\n\n[${result.issue.short_id || result.issue.id.slice(0, 6)}] ${result.issue.title}\n${priorityEmoji} ${result.issue.priority} | 📁 ${result.issue.project?.name || "No project"}${dueDate}${desc}\n\n📊 ${result.pending_count || 0} pending tasks remaining\n\n💡 Use cf_tools with query "start task" to begin working\n\n🔗 ${getTaskDashboardUrl(result.issue.id)}`,
               },
             ],
           };
@@ -4248,7 +4319,7 @@ async function main() {
                     message: `➕ Task created: [${result.issue?.short_id}] ${result.issue?.title}`,
                     hint: assigneeEmail
                       ? `Assigned to ${assigneeEmail}`
-                      : "Use tasks_assign to assign this task to a collaborator",
+                      : "Use cf_tools with query \"assign task\" to assign this task to a collaborator",
                     details: {
                       id: result.issue?.short_id,
                       title: result.issue?.title,
@@ -4516,7 +4587,7 @@ async function main() {
               content: [
                 {
                   type: "text" as const,
-                  text: `💬 No comments on this task yet\n\n💡 Use tasks_add_comment to add one`,
+                  text: `💬 No comments on this task yet\n\n💡 Use cf_tools with query "add comment" to add one`,
                 },
               ],
             };
@@ -4624,7 +4695,7 @@ async function main() {
               content: [
                 {
                   type: "text" as const,
-                  text: `👥 No collaborators on project "${result.project?.name || "this project"}" yet\n\n💡 Use project_share to invite collaborators`,
+                  text: `👥 No collaborators on project "${result.project?.name || "this project"}" yet\n\n💡 Use cf_tools with query "share project" to invite collaborators`,
                 },
               ],
             };
@@ -4639,7 +4710,7 @@ async function main() {
             content: [
               {
                 type: "text" as const,
-                text: `👥 ${collabCount} collaborator${collabCount === 1 ? "" : "s"} on "${result.project?.name || "this project"}"\n\n${collabLines.join("\n\n")}\n\n💡 Use tasks_create or tasks_assign to assign tasks`,
+                text: `👥 ${collabCount} collaborator${collabCount === 1 ? "" : "s"} on "${result.project?.name || "this project"}"\n\n${collabLines.join("\n\n")}\n\n💡 Use cf_tools with query "assign task" (or "create task") to assign or create tasks`,
               },
             ],
           };
