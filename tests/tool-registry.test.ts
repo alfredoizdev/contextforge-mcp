@@ -105,10 +105,11 @@ describe("splitTools", () => {
 const HIDDEN: ToolDef[] = [
   { name: "memory_git_commits", description: "List commits stored in memory from connected repositories", inputSchema: {} },
   { name: "memory_git_sync", description: "Sync a connected git repository into memory", inputSchema: {} },
-  { name: "memory_forget", description: "Mark a knowledge item as no longer applicable", inputSchema: {} },
   { name: "tasks_create", description: "Create a new task or issue", inputSchema: {} },
   { name: "skills_run", description: "Execute a stored skill", inputSchema: {} },
   { name: "memory_export", description: "Export all knowledge items to a file", inputSchema: {} },
+  { name: "memory_move_item", description: "Move an item to another space, or optionally export it first", inputSchema: {} },
+  { name: "memory_snapshot_restore", description: "Restore memory to a previous snapshot state", inputSchema: {} },
 ];
 
 describe("searchTools", () => {
@@ -124,18 +125,19 @@ describe("searchTools", () => {
   });
 
   it("finds a tool through a Spanish synonym with no lexical overlap", () => {
-    const names = searchTools(HIDDEN, "olvidar algo que ya no aplica").map((t) => t.name);
-    expect(names).toContain("memory_forget");
+    const names = searchTools(HIDDEN, "deshacer").map((t) => t.name);
+    expect(names).toContain("memory_snapshot_restore");
   });
 
   it("finds a tool through an English synonym with no lexical overlap", () => {
-    const names = searchTools(HIDDEN, "this memory is outdated").map((t) => t.name);
-    expect(names).toContain("memory_forget");
+    const names = searchTools(HIDDEN, "undo snapshot").map((t) => t.name);
+    expect(names).toContain("memory_snapshot_restore");
   });
 
   it("matches words in the description", () => {
     const names = searchTools(HIDDEN, "issue").map((t) => t.name);
-    expect(names).toContain("tasks_create");
+    expect(names[0]).toBe("tasks_create");
+    expect(names.length).toBe(1);
   });
 
   it("returns an empty array when nothing matches", () => {
@@ -150,10 +152,37 @@ describe("searchTools", () => {
   it("ranks a name match above a description-only match", () => {
     const names = searchTools(HIDDEN, "export").map((t) => t.name);
     expect(names[0]).toBe("memory_export");
+    expect(names.length).toBeGreaterThan(1);
+    expect(names).toContain("memory_move_item");
   });
 
   it("ignores very short noise words", () => {
     const names = searchTools(HIDDEN, "a of the git").map((t) => t.name);
     expect(names).toContain("memory_git_sync");
+  });
+
+  it("breaks ties by preferring shorter names and alphabetical order", () => {
+    // Create a fixture where multiple tools match "memory" at the same score
+    const fixture: ToolDef[] = [
+      { name: "memory_get_item", description: "Get an item", inputSchema: {} },
+      { name: "memory_list_items", description: "List items in memory", inputSchema: {} },
+      { name: "memory_move_item", description: "Move an item", inputSchema: {} },
+      { name: "memory_list_spaces", description: "List memory spaces", inputSchema: {} },
+      { name: "memory_create_space", description: "Create a new space", inputSchema: {} },
+      { name: "memory_delete_space", description: "Delete a space from memory", inputSchema: {} },
+    ];
+    const names = searchTools(fixture, "memory", 5).map((t) => t.name);
+    // All match "memory" in name at score 10, so tie-breaker applies:
+    // Sorted by: length ascending, then alphabetical
+    // memory_get_item (15) < memory_move_item (16) < memory_list_items (17) < memory_list_spaces (18)
+    // < memory_create_space (19) < memory_delete_space (19) alphabetically
+    expect(names[0]).toBe("memory_get_item"); // 15 chars, shortest
+    expect(names[1]).toBe("memory_move_item"); // 16 chars
+    expect(names[2]).toBe("memory_list_items"); // 17 chars
+    expect(names[3]).toBe("memory_list_spaces"); // 18 chars
+    expect(names[4]).toBe("memory_create_space"); // 19 chars, alphabetically first of two
+    // Verify results are deterministic (running again produces same order)
+    const names2 = searchTools(fixture, "memory", 5).map((t) => t.name);
+    expect(names).toEqual(names2);
   });
 });
