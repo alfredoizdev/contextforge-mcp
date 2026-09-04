@@ -143,15 +143,28 @@ describe("reachability", () => {
     }
   });
 
-  it("exercises synonyms: each hidden tool with SYNONYMS entry is findable by synonym", () => {
+  it("ensures tools with synonyms are not crowded out of top 5 by competitors", () => {
+    // LIMITATION: This test derives its queries from SYNONYMS[t.name] itself, so it
+    // cannot detect if a synonym is wrong, misspelled, or missing. It only checks
+    // that when you search for a tool's own synonym, that tool appears in the top 5
+    // results (i.e., it is not crowded out by competitors with higher scores).
+    //
+    // Detecting wrong/misspelled synonyms requires fixed queries independent of the
+    // SYNONYMS map — that is what the "search relevance" tests below provide by
+    // porting probe queries that succeeded against the current SYNONYMS. Tools
+    // covered by those fixed queries are protected; uncovered tools have no guard
+    // against synonym errors.
+    //
+    // This test is still valuable: it catches the failure mode where a tool's own
+    // synonyms exist but the tool gets crowded out of top 5 by a competitor with
+    // a higher-scoring match to the same query.
     const failedSynonyms: string[] = [];
     for (const t of hidden) {
       if (SYNONYMS[t.name]) {
-        // For each synonym of this tool, search using that synonym
         for (const syn of SYNONYMS[t.name]) {
           const results = searchTools(hidden, syn, 5);
           if (!results.some((m) => m.name === t.name)) {
-            failedSynonyms.push(`${t.name}: synonym "${syn}" did not find it`);
+            failedSynonyms.push(`${t.name}: crowded out by synonym "${syn}"`);
           }
         }
       }
