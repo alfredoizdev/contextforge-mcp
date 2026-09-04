@@ -268,8 +268,11 @@ describe("buildGatewayTool", () => {
   it("tells the agent that unlisted capabilities live here", async () => {
     // This sentence is the recovery path for already-installed CLAUDE.md files
     // that name a now-hidden tool. Losing it silently breaks those users.
+    // Assert both halves: (1) capability may be unlisted, (2) this tool is where to find it.
     const { buildGatewayTool } = await import("../src/tool-registry.js");
-    expect(buildGatewayTool(59).description.toLowerCase()).toContain("cannot find");
+    const desc = buildGatewayTool(59).description.toLowerCase();
+    expect(desc).toContain("cannot find");
+    expect(desc).toContain("search for it here");
   });
 
   it("exposes exactly query, name and args", async () => {
