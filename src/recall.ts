@@ -106,7 +106,8 @@ export function formatRecall(input: {
     lines.push("");
     lines.push("Pending tasks:");
     for (const t of tasks) {
-      const meta = [t.priority, t.due_date ? `due ${t.due_date}` : undefined].filter(Boolean).join(", ");
+      const due = t.due_date ? `due ${t.due_date.slice(0, 10)}` : undefined;
+      const meta = [t.priority, due].filter(Boolean).join(", ");
       const id = t.short_id ? `[${t.short_id}] ` : "";
       lines.push(`- ${id}${oneLine(t.title)}${meta ? ` (${meta})` : ""}`);
     }
@@ -123,7 +124,7 @@ export interface RecallClient {
   listSpaces(
     projectId?: string,
     spaceType?: "regular" | "git" | "all",
-  ): Promise<Array<{ name: string }>>;
+  ): Promise<Array<{ id: string; name: string }>>;
   listItems(spaceId?: string, limit?: number): Promise<{ items: RecallItem[] }>;
   listTasks(input: { status?: string; limit?: number }): Promise<{ issues: RecallTask[] }>;
 }
@@ -162,10 +163,22 @@ export async function runRecall(opts: {
       (new ApiClient({ apiKey, apiUrl }) as unknown as RecallClient);
 
     const work = (async () => {
+      // The `items` endpoint filters by space_id only (no project_id), and the
+      // account-wide newest 50 may all belong to other projects. So ask each
+      // of this project's spaces for its newest items, in parallel, then merge.
       const spaces = await client.listSpaces(link.project_id, "regular");
-      const names = new Set(spaces.map((s) => s.name));
-      const { items } = await client.listItems(undefined, 50);
-      const scoped = items.filter((it) => names.has(it.space)).slice(0, RECALL_MAX_ITEMS);
+      const perSpace = await Promise.all(
+        spaces.map((s) =>
+          client
+            .listItems(s.id, RECALL_MAX_ITEMS)
+            .then((r) => r.items ?? [])
+            .catch(() => [] as RecallItem[]),
+        ),
+      );
+      const scoped = perSpace
+        .flat()
+        .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at))
+        .slice(0, RECALL_MAX_ITEMS);
 
       let tasks: RecallTask[] = [];
       try {

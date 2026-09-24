@@ -54,6 +54,15 @@ describe("formatRecall", () => {
     expect(out).toContain("- [f8drg2] Check-in 7 días (high, due 2026-09-30)");
   });
 
+  it("shows only the date part of an ISO due_date", () => {
+    const out = formatRecall({
+      projectName: "P",
+      items: [],
+      tasks: [{ short_id: "x1", title: "T", priority: "high", due_date: "2026-05-29T00:00:00+00:00" }],
+    });
+    expect(out).toContain("- [x1] T (high, due 2026-05-29)");
+  });
+
   it("ends with the reminder to query memory for anything older", () => {
     const out = formatRecall({ projectName: "P", items: [item("X")], tasks: [] });
     expect(out).toContain("memory_query");
