@@ -65,6 +65,8 @@ import {
 import { appendFileSync } from "fs";
 import { createRequire } from "module";
 import { basename } from "path";
+import { homedir } from "os";
+import { runRecall } from "./recall.js";
 import { checkForUpdates, getUpdateNotice } from "./update-checker.js";
 import { formatIngestResult } from "./format-ingest.js";
 import { buildRoutingHint } from "./space-routing.js";
@@ -146,6 +148,21 @@ if (process.argv[2] === "init") {
       ? { editor: editorValue as "claude" | "cursor" | "all" }
       : undefined,
   );
+  process.exit(0);
+}
+
+// ============ CLI subcommand: `contextforge-mcp recall` ============
+// Used by the Claude Code `SessionStart` hook (matcher: compact) that
+// `contextforge-mcp init` installs. Prints the linked project's most recent
+// memories + pending tasks so Claude Code re-injects them after compaction.
+// Must never fail: any problem prints nothing and exits 0.
+if (process.argv[2] === "recall") {
+  const block = await runRecall({
+    cwd: process.cwd(),
+    env: process.env,
+    homeDir: homedir(),
+  });
+  if (block) process.stdout.write(block);
   process.exit(0);
 }
 
