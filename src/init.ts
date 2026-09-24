@@ -1,5 +1,6 @@
-import { existsSync, readFileSync, writeFileSync } from "fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import { join } from "path";
+import { RECALL_COMMAND } from "./recall.js";
 
 /** Hidden sentinel — used to detect if we have already written our section. */
 export const INIT_MARKER = "<!-- contextforge-mcp:init -->";
@@ -243,6 +244,78 @@ export interface InitResult {
   path: string;
   fileCreated: boolean;
   sections: SectionResult[];
+  /** Only set for the claude editor: the SessionStart/compact recall hook. */
+  hook?: HookInstallResult;
+}
+
+export type HookInstallAction = "created" | "appended" | "already-present";
+
+export interface HookInstallResult {
+  path: string;
+  action: HookInstallAction;
+}
+
+interface HookEntry {
+  type: string;
+  command?: string;
+}
+interface HookGroup {
+  matcher?: string;
+  hooks?: HookEntry[];
+}
+interface ClaudeSettings {
+  hooks?: Record<string, HookGroup[]>;
+  [key: string]: unknown;
+}
+
+const RECALL_HOOK_GROUP: HookGroup = {
+  matcher: "compact",
+  hooks: [{ type: "command", command: RECALL_COMMAND }],
+};
+
+function hasRecallHook(settings: ClaudeSettings): boolean {
+  const groups = settings.hooks?.SessionStart ?? [];
+  return groups.some((g) =>
+    (g.hooks ?? []).some((h) => h.command === RECALL_COMMAND),
+  );
+}
+
+/**
+ * Merge the post-compaction recall hook into `<cwd>/.claude/settings.json`.
+ * Creates the file if missing, appends a SessionStart/compact group if
+ * absent, and never touches other keys or hook groups. A file we cannot
+ * parse is left untouched (reported as already-present so init still
+ * succeeds; the CLI prints a warning).
+ */
+export function installClaudeRecallHook(cwd: string): HookInstallResult {
+  const dir = join(cwd, ".claude");
+  const path = join(dir, "settings.json");
+
+  if (!existsSync(path)) {
+    mkdirSync(dir, { recursive: true });
+    const fresh: ClaudeSettings = {
+      hooks: { SessionStart: [RECALL_HOOK_GROUP] },
+    };
+    writeFileSync(path, JSON.stringify(fresh, null, 2) + "\n");
+    return { path, action: "created" };
+  }
+
+  let settings: ClaudeSettings;
+  try {
+    settings = JSON.parse(readFileSync(path, "utf-8")) as ClaudeSettings;
+  } catch {
+    return { path, action: "already-present" };
+  }
+
+  if (hasRecallHook(settings)) return { path, action: "already-present" };
+
+  settings.hooks = settings.hooks ?? {};
+  settings.hooks.SessionStart = [
+    ...(settings.hooks.SessionStart ?? []),
+    RECALL_HOOK_GROUP,
+  ];
+  writeFileSync(path, JSON.stringify(settings, null, 2) + "\n");
+  return { path, action: "appended" };
 }
 
 /**
@@ -384,7 +457,11 @@ function applyTemplate(cwd: string, editor: Editor): InitResult {
  */
 export function runInit(cwd: string, options?: InitOptions): InitResult[] {
   const editors = resolveEditors(cwd, options);
-  return editors.map((editor) => applyTemplate(cwd, editor));
+  return editors.map((editor) => {
+    const result = applyTemplate(cwd, editor);
+    if (editor === "claude") result.hook = installClaudeRecallHook(cwd);
+    return result;
+  });
 }
 
 /** CLI wrapper — one line per file, one line per section. */
@@ -416,6 +493,15 @@ export function runInitCLI(cwd: string, options?: InitOptions): InitResult[] {
       } else {
         console.log(`  ${green}✓${reset} ${s.title}: ${s.action}`);
       }
+    }
+    if (result.hook) {
+      const hookChanged = result.hook.action !== "already-present";
+      anyChange = anyChange || hookChanged;
+      const label = hookChanged ? `${green}✓${reset}` : `${yellow}•${reset}`;
+      const verb = hookChanged ? result.hook.action : "already present";
+      console.log(
+        `  ${label} Post-compaction recall hook (${result.hook.path}): ${verb}`,
+      );
     }
     console.log("");
   }
