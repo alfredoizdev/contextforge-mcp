@@ -115,16 +115,18 @@ Set up your project so your AI editor always prefers ContextForge memory:
 npx contextforge-mcp init
 ```
 
-By default, `init` auto-detects which editor your project uses and writes three rule sections:
+By default, `init` auto-detects which editor your project uses and writes three rule sections and one hook:
 
 - **Memory rules** — route memory questions to ContextForge instead of the built-in file memory
 - **Session Presence rules** — make parallel sessions check for each other at conversation start and before big changes
 - **Startup Context rules** — load a short project summary (overview, open tasks, live sessions) from ContextForge at the start of every conversation
+- **Post-compaction recall hook** (Claude Code only) — a `SessionStart` hook with matcher `compact` in `.claude/settings.json`. When Claude Code compacts a long conversation, the hook runs `npx -y contextforge-mcp recall` and re-injects your project's 10 most recent memories and pending tasks, so decisions saved in ContextForge survive the summary.
 
 Files written:
 
 - `CLAUDE.md` for Claude Code (signals: existing `CLAUDE.md` or `.claude/` directory)
 - `.cursorrules` for Cursor (signals: existing `.cursorrules` or `.cursor/` directory)
+- `.claude/settings.json` for Claude Code — merged, never overwritten; only the recall hook is added
 
 If no editor is detected, both files are generated.
 
@@ -148,6 +150,18 @@ npx contextforge-mcp --version   # also: -v, version
 
 Prints the installed version (e.g. `contextforge-mcp 0.5.2`).
 
+#### Surviving compaction (Claude Code)
+
+Long sessions get compacted: Claude Code summarizes the conversation to free space, and the summary keeps the gist but drops details — usually the decisions. `init` installs a hook that fires right after every compaction and prints your project's most recent ContextForge memories and pending tasks back into the context.
+
+The hook runs as a plain shell command, so it reads your API key from `CONTEXTFORGE_API_KEY` if set, otherwise from the `contextforge` server entry in `~/.claude.json` (where `claude mcp add` stores it), otherwise from a project `.mcp.json`. It needs a linked project (`.contextforge` in the repo root). If anything is missing it prints nothing and never blocks the session.
+
+Try it by hand from your project directory:
+
+```bash
+npx contextforge-mcp recall
+```
+
 #### Already using ContextForge? (existing users)
 
 Nothing to reconfigure. Update to the latest and restart your AI client:
@@ -156,7 +170,7 @@ Nothing to reconfigure. Update to the latest and restart your AI client:
 npm update -g contextforge-mcp   # only if you installed globally; npx users get it on next launch
 ```
 
-You do **not** need to re-run `init` — the auto-load behavior ships with the server and applies on your next connection.
+You do **not** need to re-run `init` for the auto-load behavior. To get the post-compaction recall hook, run `npx contextforge-mcp init` once in each project; it only adds what is missing.
 
 ---
 

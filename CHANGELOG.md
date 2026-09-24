@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- **Memories now survive Claude Code compaction.** `init` installs a `SessionStart` hook (matcher `compact`) in `.claude/settings.json` that runs the new `contextforge-mcp recall` subcommand after every compaction and re-injects the linked project's 10 most recent memories and up to 5 pending tasks into the context. The hook never blocks a session: with no key, no linked project, a network error, or after 8 s it prints nothing and exits 0.
+- New CLI subcommand `contextforge-mcp recall`. Resolves the API key from `CONTEXTFORGE_API_KEY`, then `~/.claude.json`, then `<cwd>/.mcp.json`.
+- `init` is still idempotent per section, and the hook is merged into an existing `settings.json` without touching other keys or hooks.
+
 ## 0.11.0
 
 - **Default tool surface reduced from 69 to 11.** The server now exposes 10 core tools — `memory_query`, `memory_ingest`, `memory_check_freshness`, `memory_confirm`, `memory_correct`, `memory_forget`, `tasks_list`, `tasks_what_next`, `session_list`, `memory_help` — plus one gateway tool, `cf_tools`. No capability was removed: all 59 other tools remain fully callable, either directly by name (`cf_tools({ name, args })`) or by natural-language search (`cf_tools({ query })`), which matches against tool names, categories, and a hand-written synonym map and returns full, ready-to-call schemas for the best matches. Search covers both English and Spanish (e.g. "olvidar un recuerdo viejo" surfaces `memory_forget`).
