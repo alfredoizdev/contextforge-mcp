@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from "fs";
 import { join } from "path";
+import { ApiClient, readProjectLinkConfig } from "./api-client.js";
 
 /** Exact hook command written by `init`. Keep in sync with README. */
 export const RECALL_COMMAND = "npx -y contextforge-mcp recall";
@@ -113,4 +114,72 @@ export function formatRecall(input: {
   lines.push("");
   lines.push("For anything older or more specific, call memory_query before answering.");
   return lines.join("\n") + "\n";
+}
+
+export const DEFAULT_API_URL = "https://byzngcpqiqmqpxpmnhmo.supabase.co";
+export const RECALL_TIMEOUT_MS = 8000;
+
+export interface RecallClient {
+  listSpaces(
+    projectId?: string,
+    spaceType?: "regular" | "git" | "all",
+  ): Promise<Array<{ name: string }>>;
+  listItems(spaceId?: string, limit?: number): Promise<{ items: RecallItem[] }>;
+  listTasks(input: { status?: string; limit?: number }): Promise<{ issues: RecallTask[] }>;
+}
+
+function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error("recall timeout")), ms);
+    p.then(
+      (v) => { clearTimeout(t); resolve(v); },
+      (e) => { clearTimeout(t); reject(e); },
+    );
+  });
+}
+
+/**
+ * Fetch and format the post-compaction context block. Never rejects; any
+ * failure resolves to "" so the hook can never break a session.
+ */
+export async function runRecall(opts: {
+  cwd: string;
+  env: NodeJS.ProcessEnv;
+  homeDir: string;
+  timeoutMs?: number;
+  makeClient?: (apiKey: string, apiUrl: string) => RecallClient;
+}): Promise<string> {
+  try {
+    const apiKey = resolveApiKey({ env: opts.env, homeDir: opts.homeDir, cwd: opts.cwd });
+    if (!apiKey) return "";
+
+    const link = readProjectLinkConfig(opts.cwd);
+    if (!link?.project_id) return "";
+
+    const apiUrl = opts.env.CONTEXTFORGE_API_URL || DEFAULT_API_URL;
+    const client =
+      opts.makeClient?.(apiKey, apiUrl) ??
+      (new ApiClient({ apiKey, apiUrl }) as unknown as RecallClient);
+
+    const work = (async () => {
+      const spaces = await client.listSpaces(link.project_id, "regular");
+      const names = new Set(spaces.map((s) => s.name));
+      const { items } = await client.listItems(undefined, 50);
+      const scoped = items.filter((it) => names.has(it.space)).slice(0, RECALL_MAX_ITEMS);
+
+      let tasks: RecallTask[] = [];
+      try {
+        const res = await client.listTasks({ status: "pending", limit: RECALL_MAX_TASKS });
+        tasks = res.issues ?? [];
+      } catch {
+        tasks = [];
+      }
+
+      return formatRecall({ projectName: link.project_name || link.project_id, items: scoped, tasks });
+    })();
+
+    return await withTimeout(work, opts.timeoutMs ?? RECALL_TIMEOUT_MS);
+  } catch {
+    return "";
+  }
 }
