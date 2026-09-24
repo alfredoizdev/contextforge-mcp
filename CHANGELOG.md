@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.12.0
 
 - **Memories now survive Claude Code compaction.** `init` installs a `SessionStart` hook (matcher `compact`) in `.claude/settings.json` that runs the new `contextforge-mcp recall` subcommand after every compaction and re-injects the linked project's 10 most recent memories and up to 5 pending tasks into the context. The hook never blocks a session: with no key, no linked project, a network error, or after 8 s it prints nothing and exits 0.
 - New CLI subcommand `contextforge-mcp recall`. Resolves the API key from `CONTEXTFORGE_API_KEY`, then `~/.claude.json`, then `<cwd>/.mcp.json`.
