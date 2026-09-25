@@ -1,7 +1,10 @@
 #!/usr/bin/env node
 // Builds the MCPB desktop-extension bundle:
 //   manifest (version + live tools list) + dist + production node_modules + icon
-// Usage: npm run mcpb
+// Usage: npm run mcpb            → spec-validated bundle (Claude Desktop / Anthropic directory)
+//        npm run mcpb -- --smithery → Smithery variant: adds inputSchema per tool
+//          (Smithery's publish API requires it, the MCPB validator rejects it),
+//          skips the official validator, writes *-smithery.mcpb.
 import { spawn, execSync } from "node:child_process";
 import {
   mkdirSync,
@@ -17,6 +20,8 @@ import { fileURLToPath } from "node:url";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const STAGE = join(ROOT, "mcpb-build");
+
+const SMITHERY = process.argv.includes("--smithery");
 
 const log = (msg) => console.log(`[mcpb] ${msg}`);
 
@@ -66,6 +71,10 @@ const tools = await new Promise((resolve, reject) => {
               // First line only — manifest descriptions are directory copy,
               // not the full multi-paragraph tool prompt.
               description: (t.description || "").split("\n")[0].slice(0, 200),
+              // Smithery's publish API builds its server card from these
+              // entries and requires an inputSchema object per tool. The MCPB
+              // spec validator rejects the key, so only the Smithery variant has it.
+              ...(SMITHERY ? { inputSchema: t.inputSchema ?? { type: "object" } } : {}),
             })),
           );
         }
@@ -113,11 +122,24 @@ log("npm ci --omit=dev in staging...");
 execSync("npm ci --omit=dev --ignore-scripts", { cwd: STAGE, stdio: "inherit" });
 
 // 6. Validate + pack with the official CLI.
-const out = join(ROOT, `contextforge-mcp-${pkg.version}.mcpb`);
-log("validating manifest...");
-execSync(`npx --yes @anthropic-ai/mcpb validate "${join(STAGE, "manifest.json")}"`, {
-  stdio: "inherit",
-});
+const out = join(
+  ROOT,
+  `contextforge-mcp-${pkg.version}${SMITHERY ? "-smithery" : ""}.mcpb`,
+);
+if (SMITHERY) {
+  log("skipping official validator (Smithery variant carries inputSchema per tool)");
+} else {
+  log("validating manifest...");
+  execSync(`npx --yes @anthropic-ai/mcpb validate "${join(STAGE, "manifest.json")}"`, {
+    stdio: "inherit",
+  });
+}
 log("packing...");
-execSync(`npx --yes @anthropic-ai/mcpb pack "${STAGE}" "${out}"`, { stdio: "inherit" });
+if (SMITHERY) {
+  // `mcpb pack` re-validates and would reject inputSchema; an .mcpb is a plain zip.
+  rmSync(out, { force: true });
+  execSync(`zip -qr "${out}" . -x ".DS_Store" "*/.DS_Store"`, { cwd: STAGE, stdio: "inherit" });
+} else {
+  execSync(`npx --yes @anthropic-ai/mcpb pack "${STAGE}" "${out}"`, { stdio: "inherit" });
+}
 log(`done: ${out} (${(statSync(out).size / 1024 / 1024).toFixed(1)} MB)`);
