@@ -1,6 +1,8 @@
-import { existsSync, readFileSync } from "fs";
-import { join } from "path";
+import { existsSync, readFileSync, readdirSync, statSync } from "fs";
+import { join, basename } from "path";
+import { spawnSync } from "child_process";
 import { ApiClient, readProjectLinkConfig } from "./api-client.js";
+import { sessionsDir } from "./objective-hook.js";
 
 /** Exact hook command written by `init`. Keep in sync with README. */
 export const RECALL_COMMAND = "npx -y contextforge-mcp recall";
@@ -195,4 +197,212 @@ export async function runRecall(opts: {
   } catch {
     return "";
   }
+}
+
+// ===========================================================================
+// 0.13.0 — session objective (from the UserPromptSubmit hook log)
+// ===========================================================================
+
+/** One line of `~/.contextforge/sessions/<session_id>.jsonl`, as written by the objective hook. */
+export interface SessionPromptEntry {
+  t: number;
+  turn: number | null;
+  cwd: string | null;
+  prompt: string;
+}
+
+export const OBJECTIVE_MAX_CHARS = 300;
+/** Prompts shorter than this are never an objective ("fix it", "ok go"). */
+const OBJECTIVE_MIN_CHARS = 15;
+/** Manual-run fallback only considers session files touched within this window. */
+const SESSION_FILE_MAX_AGE_MS = 24 * 3600 * 1000;
+/** Pure acknowledgements / greetings in EN+ES, never an objective. */
+const ACK_RE =
+  /^(ok(ay)?|yes|yep|yeah|y|no|nope|n|s[ií]|dale|go|go ahead|continue|contin[uú]a|sigue|thanks|thank you|gracias|hola|hi|hello|hey|vale|listo|perfecto|perfect|great|nice|done|hecho)\b[\s.!,]*$/i;
+
+/** Collapse whitespace to single spaces and cut to `max` chars with an ellipsis. */
+export function flattenCut(text: string, max: number): string {
+  const flat = text.replace(/\s+/g, " ").trim();
+  return flat.length > max ? flat.slice(0, max).trimEnd() + "…" : flat;
+}
+
+/** Parse a session log; corrupt lines are skipped. Never throws. */
+export function readSessionPrompts(file: string): SessionPromptEntry[] {
+  let raw: string;
+  try {
+    raw = readFileSync(file, "utf-8");
+  } catch {
+    return [];
+  }
+  const out: SessionPromptEntry[] = [];
+  for (const line of raw.split("\n")) {
+    if (!line.trim()) continue;
+    try {
+      const j = JSON.parse(line) as Partial<SessionPromptEntry>;
+      if (typeof j.prompt !== "string") continue;
+      out.push({
+        t: typeof j.t === "number" ? j.t : 0,
+        turn: typeof j.turn === "number" ? j.turn : null,
+        cwd: typeof j.cwd === "string" ? j.cwd : null,
+        prompt: j.prompt,
+      });
+    } catch {
+      /* skip corrupt line */
+    }
+  }
+  return out;
+}
+
+/**
+ * Locate the session log. With a session id (what Claude Code passes to the
+ * SessionStart hook on stdin) the file name is deterministic. Without one
+ * (a manual `contextforge-mcp recall` from a terminal) fall back to the most
+ * recently modified log whose last entry was recorded in this cwd, if it was
+ * touched in the last 24 h. Never throws.
+ */
+export function findSessionFile(opts: {
+  homeDir: string;
+  sessionId?: string;
+  cwd: string;
+}): string | null {
+  const dir = sessionsDir(opts.homeDir);
+  try {
+    if (opts.sessionId) {
+      const sid = opts.sessionId.replace(/[^A-Za-z0-9_-]/g, "");
+      if (!sid) return null;
+      const file = join(dir, `${sid}.jsonl`);
+      return existsSync(file) ? file : null;
+    }
+    if (!existsSync(dir)) return null;
+    const now = Date.now();
+    const candidates = readdirSync(dir)
+      .filter((f) => f.endsWith(".jsonl"))
+      .map((f) => {
+        const file = join(dir, f);
+        try {
+          return { file, mtime: statSync(file).mtimeMs };
+        } catch {
+          return null;
+        }
+      })
+      .filter((c): c is { file: string; mtime: number } => !!c && now - c.mtime <= SESSION_FILE_MAX_AGE_MS)
+      .sort((a, b) => b.mtime - a.mtime);
+    for (const c of candidates) {
+      const entries = readSessionPrompts(c.file);
+      const last = entries[entries.length - 1];
+      if (last && last.cwd === opts.cwd) return c.file;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function isObjectiveCandidate(prompt: string): boolean {
+  const flat = prompt.replace(/\s+/g, " ").trim();
+  if (flat.length < OBJECTIVE_MIN_CHARS) return false;
+  if (flat.startsWith("/")) return false;
+  if (ACK_RE.test(flat)) return false;
+  return true;
+}
+
+/**
+ * Pick the session objective (first real request) and, when it differs, the
+ * latest real request before the compaction. Pure.
+ */
+export function selectObjective(entries: SessionPromptEntry[]): { objective?: string; latest?: string } {
+  const ordered = [...entries].sort((a, b) => {
+    if (a.turn !== null && b.turn !== null && a.turn !== b.turn) return a.turn - b.turn;
+    return a.t - b.t;
+  });
+  const candidates = ordered.filter((x) => isObjectiveCandidate(x.prompt));
+  if (candidates.length === 0) return {};
+  const objective = flattenCut(candidates[0].prompt, OBJECTIVE_MAX_CHARS);
+  const lastRaw = candidates[candidates.length - 1];
+  const latest = flattenCut(lastRaw.prompt, OBJECTIVE_MAX_CHARS);
+  if (candidates.length === 1 || latest === objective) return { objective };
+  return { objective, latest };
+}
+
+// ===========================================================================
+// 0.13.0 — working context from git (what is being worked on right now)
+// ===========================================================================
+
+export interface GitSignals {
+  branch: string;
+  commits: string[];
+  changedFiles: string[];
+}
+
+const GIT_TIMEOUT_MS = 1500;
+const GIT_MAX_COMMITS = 3;
+const GIT_MAX_FILES = 8;
+export const WORKING_CONTEXT_MAX_CHARS = 600;
+
+function gitOut(args: string[], cwd: string, opts: { trim?: boolean } = {}): string | null {
+  try {
+    const r = spawnSync("git", args, {
+      cwd,
+      encoding: "utf-8",
+      timeout: GIT_TIMEOUT_MS,
+      maxBuffer: 256 * 1024,
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+    if (r.status !== 0 || typeof r.stdout !== "string") return null;
+    return opts.trim === false ? r.stdout : r.stdout.trim();
+  } catch {
+    return null;
+  }
+}
+
+/** Branch, last commit subjects and changed files. `null` when `cwd` is not a git repo or git is missing. Never throws. */
+export function collectGitSignals(cwd: string): GitSignals | null {
+  try {
+    if (!existsSync(cwd)) return null;
+    const inside = gitOut(["rev-parse", "--is-inside-work-tree"], cwd);
+    if (inside !== "true") return null;
+    const branch = gitOut(["rev-parse", "--abbrev-ref", "HEAD"], cwd) ?? "";
+    const commits = (gitOut(["log", `-${GIT_MAX_COMMITS}`, "--pretty=%s"], cwd) ?? "")
+      .split("\n")
+      .map((l) => l.trim())
+      .filter(Boolean);
+    // Porcelain v1 lines are "XY <path>" (two status chars, a space, the path);
+    // the first line may start with a space, so the output must not be trimmed.
+    const changedFiles = (gitOut(["status", "--porcelain", "--untracked-files=all"], cwd, { trim: false }) ?? "")
+      .split("\n")
+      .map((l) => (l.length > 3 ? l.slice(3) : ""))
+      .map((f) => (f.includes(" -> ") ? f.split(" -> ")[1] : f))
+      .map((f) => f.trim().replace(/^"|"$/g, ""))
+      .filter(Boolean)
+      .slice(0, GIT_MAX_FILES);
+    return { branch, commits, changedFiles };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Compose the semantic query used to fetch memories relevant to the current
+ * work. Returns "" when there is nothing to search for. Pure.
+ */
+export function buildWorkingContext(input: {
+  objective?: string;
+  latest?: string;
+  git?: GitSignals | null;
+}): string {
+  const parts: string[] = [];
+  if (input.objective) parts.push(input.objective);
+  if (input.latest && input.latest !== input.objective) parts.push(input.latest);
+  const git = input.git;
+  if (git) {
+    const branch = git.branch.trim();
+    if (branch && !/^(main|master|HEAD|develop|dev)$/i.test(branch)) {
+      parts.push(branch.replace(/[\/_\-.]+/g, " ").trim());
+    }
+    parts.push(...git.commits);
+    if (git.changedFiles.length) parts.push(git.changedFiles.join(" "));
+  }
+  const seen = new Set<string>();
+  const unique = parts.map((p) => p.trim()).filter((p) => p && !seen.has(p) && seen.add(p));
+  return unique.join(". ").slice(0, WORKING_CONTEXT_MAX_CHARS);
 }
