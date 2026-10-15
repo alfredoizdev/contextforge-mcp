@@ -1,6 +1,12 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import { join } from "path";
 import { RECALL_COMMAND } from "./recall.js";
+import {
+  OBJECTIVE_HOOK_COMMAND,
+  OBJECTIVE_HOOK_RELATIVE_PATH,
+  OBJECTIVE_HOOK_SCRIPT,
+  OBJECTIVE_HOOK_TIMEOUT_S,
+} from "./objective-hook.js";
 
 /** Hidden sentinel — used to detect if we have already written our section. */
 export const INIT_MARKER = "<!-- contextforge-mcp:init -->";
@@ -246,6 +252,8 @@ export interface InitResult {
   sections: SectionResult[];
   /** Only set for the claude editor: the SessionStart/compact recall hook. */
   hook?: HookInstallResult;
+  /** Only set for the claude editor: the UserPromptSubmit objective hook (0.13.0). */
+  objectiveHook?: ObjectiveHookInstallResult;
 }
 
 export type HookInstallAction = "created" | "appended" | "already-present";
@@ -255,9 +263,19 @@ export interface HookInstallResult {
   action: HookInstallAction;
 }
 
+export type ScriptInstallAction = "created" | "updated" | "already-present";
+
+export interface ObjectiveHookInstallResult extends HookInstallResult {
+  /** Absolute path of the generated `.claude/hooks/contextforge-objective.cjs`. */
+  scriptPath: string;
+  scriptAction: ScriptInstallAction;
+}
+
 interface HookEntry {
   type: string;
   command?: string;
+  /** Seconds (Claude Code hook schema). */
+  timeout?: number;
 }
 interface HookGroup {
   matcher?: string;
@@ -273,29 +291,36 @@ const RECALL_HOOK_GROUP: HookGroup = {
   hooks: [{ type: "command", command: RECALL_COMMAND }],
 };
 
-function hasRecallHook(settings: ClaudeSettings): boolean {
-  const groups = settings.hooks?.SessionStart ?? [];
-  return groups.some((g) =>
-    (g.hooks ?? []).some((h) => h.command === RECALL_COMMAND),
-  );
+const OBJECTIVE_HOOK_GROUP: HookGroup = {
+  hooks: [
+    { type: "command", command: OBJECTIVE_HOOK_COMMAND, timeout: OBJECTIVE_HOOK_TIMEOUT_S },
+  ],
+};
+
+function hasHookCommand(settings: ClaudeSettings, event: string, command: string): boolean {
+  const groups = settings.hooks?.[event] ?? [];
+  return groups.some((g) => (g.hooks ?? []).some((h) => h.command === command));
 }
 
 /**
- * Merge the post-compaction recall hook into `<cwd>/.claude/settings.json`.
- * Creates the file if missing, appends a SessionStart/compact group if
- * absent, and never touches other keys or hook groups. A file we cannot
- * parse is left untouched (reported as already-present so init still
- * succeeds; the CLI prints a warning).
+ * Merge one hook group into `<cwd>/.claude/settings.json` under `event`.
+ * Creates the file if missing, appends the group if its command is absent,
+ * and never touches other keys or hook groups. A file we cannot parse is
+ * left untouched (reported as already-present so init still succeeds; the
+ * CLI prints a warning).
  */
-export function installClaudeRecallHook(cwd: string): HookInstallResult {
+function installHookGroup(
+  cwd: string,
+  event: string,
+  group: HookGroup,
+  command: string,
+): HookInstallResult {
   const dir = join(cwd, ".claude");
   const path = join(dir, "settings.json");
 
   if (!existsSync(path)) {
     mkdirSync(dir, { recursive: true });
-    const fresh: ClaudeSettings = {
-      hooks: { SessionStart: [RECALL_HOOK_GROUP] },
-    };
+    const fresh: ClaudeSettings = { hooks: { [event]: [group] } };
     writeFileSync(path, JSON.stringify(fresh, null, 2) + "\n");
     return { path, action: "created" };
   }
@@ -307,15 +332,58 @@ export function installClaudeRecallHook(cwd: string): HookInstallResult {
     return { path, action: "already-present" };
   }
 
-  if (hasRecallHook(settings)) return { path, action: "already-present" };
+  if (hasHookCommand(settings, event, command)) return { path, action: "already-present" };
 
   settings.hooks = settings.hooks ?? {};
-  settings.hooks.SessionStart = [
-    ...(settings.hooks.SessionStart ?? []),
-    RECALL_HOOK_GROUP,
-  ];
+  settings.hooks[event] = [...(settings.hooks[event] ?? []), group];
   writeFileSync(path, JSON.stringify(settings, null, 2) + "\n");
   return { path, action: "appended" };
+}
+
+/**
+ * Merge the post-compaction recall hook (SessionStart / compact) into
+ * `<cwd>/.claude/settings.json`. Behavior unchanged since 0.12.0.
+ */
+export function installClaudeRecallHook(cwd: string): HookInstallResult {
+  return installHookGroup(cwd, "SessionStart", RECALL_HOOK_GROUP, RECALL_COMMAND);
+}
+
+/**
+ * Write (or refresh) the generated objective hook script and merge the
+ * UserPromptSubmit group that runs it. The script is compared byte-for-byte
+ * with the embedded template so upgrades land on the next `init` and an
+ * up-to-date file is never rewritten. The script is written even when
+ * settings.json cannot be parsed: it is inert without the hook entry.
+ */
+export function installClaudeObjectiveHook(cwd: string): ObjectiveHookInstallResult {
+  const scriptPath = join(cwd, ...OBJECTIVE_HOOK_RELATIVE_PATH.split("/"));
+  let scriptAction: ScriptInstallAction;
+  let existing: string | null = null;
+  try {
+    existing = existsSync(scriptPath) ? readFileSync(scriptPath, "utf-8") : null;
+  } catch {
+    existing = null;
+  }
+  if (existing === OBJECTIVE_HOOK_SCRIPT) {
+    scriptAction = "already-present";
+  } else {
+    mkdirSync(join(cwd, ".claude", "hooks"), { recursive: true });
+    writeFileSync(scriptPath, OBJECTIVE_HOOK_SCRIPT);
+    scriptAction = existing === null ? "created" : "updated";
+  }
+
+  const settings = installHookGroup(cwd, "UserPromptSubmit", OBJECTIVE_HOOK_GROUP, OBJECTIVE_HOOK_COMMAND);
+  return { ...settings, scriptPath, scriptAction };
+}
+
+/** Install both Claude Code hooks. Each is idempotent on its own. */
+export function installClaudeHooks(cwd: string): {
+  recall: HookInstallResult;
+  objective: ObjectiveHookInstallResult;
+} {
+  const recall = installClaudeRecallHook(cwd);
+  const objective = installClaudeObjectiveHook(cwd);
+  return { recall, objective };
 }
 
 /**
@@ -459,7 +527,11 @@ export function runInit(cwd: string, options?: InitOptions): InitResult[] {
   const editors = resolveEditors(cwd, options);
   return editors.map((editor) => {
     const result = applyTemplate(cwd, editor);
-    if (editor === "claude") result.hook = installClaudeRecallHook(cwd);
+    if (editor === "claude") {
+      const hooks = installClaudeHooks(cwd);
+      result.hook = hooks.recall;
+      result.objectiveHook = hooks.objective;
+    }
     return result;
   });
 }
@@ -501,6 +573,19 @@ export function runInitCLI(cwd: string, options?: InitOptions): InitResult[] {
       const verb = hookChanged ? result.hook.action : "already present";
       console.log(
         `  ${label} Post-compaction recall hook (${result.hook.path}): ${verb}`,
+      );
+    }
+    if (result.objectiveHook) {
+      const h = result.objectiveHook;
+      const changed = h.action !== "already-present" || h.scriptAction !== "already-present";
+      anyChange = anyChange || changed;
+      const label = changed ? `${green}✓${reset}` : `${yellow}•${reset}`;
+      const parts = [
+        `hook ${h.action === "already-present" ? "already present" : h.action}`,
+        `script ${h.scriptAction === "already-present" ? "already present" : h.scriptAction}`,
+      ];
+      console.log(
+        `  ${label} Session objective hook (${h.scriptPath}): ${parts.join(", ")}`,
       );
     }
     console.log("");
