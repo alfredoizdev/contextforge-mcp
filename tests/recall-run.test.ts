@@ -115,11 +115,20 @@ describe("runRecall", () => {
     expect(lines).toHaveLength(10);
   });
 
-  it("returns empty instead of throwing when the API fails", async () => {
+  it("returns empty instead of throwing when the whole API fails", async () => {
+    linkProject(cwd);
+    const boom = async () => { throw new Error("boom"); };
+    const client = fakeClient({ listSpaces: boom, listTasks: boom });
+    const out = await runRecall({ cwd, env, homeDir: home, makeClient: () => client });
+    expect(out).toBe("");
+  });
+
+  it("0.13.1: still shows tasks when only the spaces/items call fails (best effort, mirrors the tasks-fail case)", async () => {
     linkProject(cwd);
     const client = fakeClient({ listSpaces: async () => { throw new Error("boom"); } });
     const out = await runRecall({ cwd, env, homeDir: home, makeClient: () => client });
-    expect(out).toBe("");
+    expect(out).not.toContain("Recent memories");
+    expect(out).toContain("Pending tasks:\n- [abc] Do thing (high)");
   });
 
   it("still shows items when only the tasks call fails", async () => {
@@ -359,5 +368,66 @@ describe("runRecall records a local event", () => {
       rmSync(cwd, { recursive: true, force: true });
       rmSync(home, { recursive: true, force: true });
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 0.13.1: best effort at the deadline — a slow stage degrades, never erases
+// ---------------------------------------------------------------------------
+describe("runRecall 0.13.1 (staged deadlines)", () => {
+  let cwd: string;
+  let home: string;
+  const env = { CONTEXTFORGE_API_KEY: "k" };
+  const never = () => new Promise<never>(() => {});
+  const writeSession = (sid: string, prompts: string[]) => {
+    mkdirSync(sessionsDir(home), { recursive: true });
+    writeFileSync(join(sessionsDir(home), `${sid}.jsonl`), prompts.map((p, i) => JSON.stringify({ t: 1000 + i, turn: i + 1, cwd, prompt: p })).join("\n") + "\n");
+  };
+  beforeEach(() => {
+    cwd = mkdtempSync(join(tmpdir(), "cf-recall3-"));
+    home = mkdtempSync(join(tmpdir(), "cf-recall3-home-"));
+    linkProject(cwd);
+  });
+  afterEach(() => {
+    rmSync(cwd, { recursive: true, force: true });
+    rmSync(home, { recursive: true, force: true });
+  });
+
+  it("one space whose items never arrive does not erase the other spaces, tasks or objective", async () => {
+    writeSession("s-slow", ["Investigate the nightly import job slowness"]);
+    const client: RecallClient = {
+      ...fakeClient(),
+      listItems: (spaceId) => (spaceId === "sp-infra" ? never() : fakeClient().listItems(spaceId)),
+    };
+    const t0 = Date.now();
+    const out = await runRecall({ cwd, env, homeDir: home, sessionId: "s-slow", makeClient: () => client, collectGit: () => null, stageTimeoutMs: 100, timeoutMs: 5000 });
+    expect(Date.now() - t0).toBeLessThan(2000);
+    expect(out).toContain("Session objective");
+    expect(out).toContain("- [Decisions] In project — p1");
+    expect(out).not.toContain("Infra note");
+    expect(out).toContain("- [abc] Do thing (high)");
+  });
+
+  it("listSpaces that never resolves still yields objective + tasks", async () => {
+    writeSession("s-spaces", ["Investigate the nightly import job slowness"]);
+    const client: RecallClient = { ...fakeClient(), listSpaces: never };
+    const out = await runRecall({ cwd, env, homeDir: home, sessionId: "s-spaces", makeClient: () => client, collectGit: () => null, stageTimeoutMs: 100, timeoutMs: 5000 });
+    expect(out).toContain('Session objective (the user\'s first request): "Investigate the nightly import job slowness"');
+    expect(out).not.toContain("Recent memories");
+    expect(out).toContain("Pending tasks:\n- [abc] Do thing (high)");
+  });
+
+  it("everything hanging except the local log still prints the objective block", async () => {
+    writeSession("s-all", ["Investigate the nightly import job slowness"]);
+    const client: RecallClient = { listSpaces: never, listItems: never, listTasks: never, query: never };
+    const out = await runRecall({ cwd, env, homeDir: home, sessionId: "s-all", makeClient: () => client, collectGit: () => null, stageTimeoutMs: 100, timeoutMs: 5000 });
+    expect(out).toContain("Session objective");
+    expect(out).toContain("call memory_query before answering");
+  });
+
+  it("the global deadline is a last resort above the stage deadlines", async () => {
+    const { RECALL_TIMEOUT_MS, RECALL_STAGE_TIMEOUT_MS, RECALL_RELEVANCE_TIMEOUT_MS } = await import("../src/recall.js");
+    expect(RECALL_STAGE_TIMEOUT_MS).toBeLessThan(RECALL_TIMEOUT_MS);
+    expect(RECALL_RELEVANCE_TIMEOUT_MS).toBeLessThanOrEqual(RECALL_STAGE_TIMEOUT_MS);
   });
 });

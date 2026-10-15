@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.13.1
+
+- **Recall never comes back empty because one request was slow.** Each remote stage of `recall` (listing the project's spaces, each space's recent items, pending tasks, the relevance search) now has its own 6-second deadline and degrades to "nothing from this stage"; the block is built from whatever arrived, and the session objective (local) is always printed. Before, a single slow call tripped the one global 8-second deadline and the hook printed nothing at all — measured on a 21-space project, 2 of 4 real post-compaction runs came back empty. The global deadline is now a 12-second last resort. Consequence for failures: if only the memories call fails, tasks still print (mirroring the existing "only tasks fail" behavior); if everything fails and there is no local session log, the output is still empty.
+
 ## 0.13.0
 
 - **Recall now restores the session objective.** `init` writes a tiny, dependency-free hook script at `.claude/hooks/contextforge-objective.cjs` and adds a `UserPromptSubmit` hook that runs it with plain `node` (~50 ms per prompt; `npx` would cost 0.4–0.8 s). The script appends each prompt (600-char cap, slash commands skipped) to `~/.contextforge-mcp/sessions/<session_id>.jsonl` on your machine; the log is never uploaded. After a compaction, `recall` prints the session's first real request and the latest request before the cut, so the agent no longer restarts the plan from "working on auth changes". Logs are pruned after 14 days; remove the `UserPromptSubmit` group from `.claude/settings.json` to opt out.

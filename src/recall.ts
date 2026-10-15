@@ -79,6 +79,14 @@ export const RECALL_RELEVANT_MIN_SCORE = 0.4;
 const RECALL_QUERY_LIMIT = 8;
 /** The semantic query gets its own deadline so a slow backend can never erase the rest of the block. */
 export const RECALL_RELEVANCE_TIMEOUT_MS = 4000;
+/**
+ * 0.13.1 — every remote stage (spaces, each space's items, tasks) gets its
+ * own deadline and degrades to "nothing from this stage". The block is then
+ * built from whatever arrived, so a slow backend trims the block instead of
+ * erasing it. Measured 2026-10-15 on a 21-space project: 2 of 4 real hook
+ * runs hit the old single 8 s deadline and printed nothing.
+ */
+export const RECALL_STAGE_TIMEOUT_MS = 6000;
 /** Set CONTEXTFORGE_RECALL_RELEVANCE=0 to never run the semantic query. */
 export const RECALL_RELEVANCE_ENV = "CONTEXTFORGE_RECALL_RELEVANCE";
 const DEFAULT_BRANCH_RE = /^(main|master|HEAD|develop|dev|trunk)$/i;
@@ -173,7 +181,8 @@ export function formatRecall(input: {
 }
 
 export const DEFAULT_API_URL = "https://byzngcpqiqmqpxpmnhmo.supabase.co";
-export const RECALL_TIMEOUT_MS = 8000;
+/** Last-resort deadline for the whole run; the staged deadlines fire first. */
+export const RECALL_TIMEOUT_MS = 12000;
 
 export interface RecallClient {
   listSpaces(
@@ -222,6 +231,8 @@ export async function runRecall(opts: {
   collectGit?: (cwd: string) => GitSignals | null;
   /** Deadline for the semantic query alone (tests); defaults to RECALL_RELEVANCE_TIMEOUT_MS. */
   relevanceTimeoutMs?: number;
+  /** Deadline for each remote stage (tests); defaults to RECALL_STAGE_TIMEOUT_MS. */
+  stageTimeoutMs?: number;
 }): Promise<string> {
   const startedAt = Date.now();
   try {
@@ -266,19 +277,22 @@ export async function runRecall(opts: {
       // The `items` endpoint filters by space_id only (no project_id), and the
       // account-wide newest 50 may all belong to other projects. So ask each
       // of this project's spaces for its newest items, in parallel, then merge.
-      const recentP = client.listSpaces(link.project_id, "regular").then((spaces) =>
-        Promise.all(
-          spaces.map((s) =>
-            client
-              .listItems(s.id, RECALL_MAX_ITEMS)
-              .then((r) => r.items ?? [])
-              .catch(() => [] as RecallItem[]),
+      const stageMs = opts.stageTimeoutMs ?? RECALL_STAGE_TIMEOUT_MS;
+      // Each stage is bounded on its own and degrades to [] — a slow space,
+      // a slow tasks endpoint or a slow search trims the block, never erases it.
+      const recentP: Promise<RecallItem[][]> = withTimeout(client.listSpaces(link.project_id, "regular"), stageMs)
+        .then((spaces) =>
+          Promise.all(
+            spaces.map((s) =>
+              withTimeout(client.listItems(s.id, RECALL_MAX_ITEMS), stageMs)
+                .then((r) => r.items ?? [])
+                .catch(() => [] as RecallItem[]),
+            ),
           ),
-        ),
-      );
+        )
+        .catch(() => [] as RecallItem[][]);
 
-      const tasksP = client
-        .listTasks({ status: "pending", limit: RECALL_MAX_TASKS })
+      const tasksP = withTimeout(client.listTasks({ status: "pending", limit: RECALL_MAX_TASKS }), stageMs)
         .then((res) => res.issues ?? [])
         .catch(() => [] as RecallTask[]);
 
@@ -291,7 +305,7 @@ export async function runRecall(opts: {
                 limit: RECALL_QUERY_LIMIT,
                 min_score: RECALL_RELEVANT_MIN_SCORE,
               }),
-              opts.relevanceTimeoutMs ?? RECALL_RELEVANCE_TIMEOUT_MS,
+              Math.min(opts.relevanceTimeoutMs ?? RECALL_RELEVANCE_TIMEOUT_MS, stageMs),
             )
               .then((res) =>
                 (res?.results ?? [])
