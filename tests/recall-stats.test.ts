@@ -47,7 +47,7 @@ describe("recall stats (local, best-effort)", () => {
 
   it("does nothing when there are no events or the files are corrupt", () => {
     expect(recordRecallFollowup({ homeDir: home, cwd: "/repo", now: 5 })).toBe(false);
-    mkdirSync(join(home, ".contextforge"), { recursive: true });
+    mkdirSync(join(recallEventsFile(home), ".."), { recursive: true });
     writeFileSync(recallEventsFile(home), "garbage\n{bad\n");
     expect(recordRecallFollowup({ homeDir: home, cwd: "/repo", now: 5 })).toBe(false);
     expect(computeRecallStats({ homeDir: home, now: 5 })).toMatchObject({ recalls: 0, followedUp: 0, medianDelaySec: null });
@@ -92,6 +92,13 @@ describe("recall stats (local, best-effort)", () => {
     const lines = readFileSync(recallEventsFile(home), "utf-8").trim().split("\n");
     expect(lines.length).toBeLessThanOrEqual(5000);
     expect(JSON.parse(lines[lines.length - 1]).t).toBe(5009);
+  });
+
+  it("keeps working when ~/.contextforge is a project-link FILE (state lives in ~/.contextforge-mcp)", () => {
+    writeFileSync(join(home, ".contextforge"), JSON.stringify({ project_id: "p" }));
+    ev(1);
+    expect(existsSync(recallEventsFile(home))).toBe(true);
+    expect(recallEventsFile(home)).toContain(".contextforge-mcp");
   });
 
   it("never throws when the home dir is unusable", () => {

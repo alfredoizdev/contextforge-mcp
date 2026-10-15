@@ -58,6 +58,20 @@ describe.skipIf(!hasGit)("collectGitSignals", () => {
     expect(g.changedFiles.sort()).toEqual(["a.ts", "b.ts"]);
   });
 
+  it("handles a repository with zero commits (no branch, no commits, untracked files)", () => {
+    const empty = mkdtempSync(join(tmpdir(), "cf-git-empty-"));
+    try {
+      spawnSync("git", ["init", "-q"], { cwd: empty });
+      writeFileSync(join(empty, "new.ts"), "1");
+      const g = collectGitSignals(empty)!;
+      expect(g).not.toBeNull();
+      expect(g.commits).toEqual([]);
+      expect(g.changedFiles).toEqual(["new.ts"]);
+    } finally {
+      rmSync(empty, { recursive: true, force: true });
+    }
+  });
+
   it("returns null outside a repository", () => {
     const plain = mkdtempSync(join(tmpdir(), "cf-nogit-"));
     try {

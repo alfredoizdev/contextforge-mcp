@@ -40,9 +40,10 @@ describe("objective hook script", () => {
 
   it("exports stable constants that match the README contract", () => {
     expect(OBJECTIVE_HOOK_RELATIVE_PATH).toBe(".claude/hooks/contextforge-objective.cjs");
-    expect(OBJECTIVE_HOOK_COMMAND).toBe('node "$CLAUDE_PROJECT_DIR/.claude/hooks/contextforge-objective.cjs"');
+    expect(OBJECTIVE_HOOK_COMMAND).toBe('node "$CLAUDE_PROJECT_DIR/.claude/hooks/contextforge-objective.cjs" 2>/dev/null || true');
     expect(OBJECTIVE_HOOK_SCRIPT.startsWith("// contextforge-mcp objective hook v1")).toBe(true);
-    expect(sessionsDir("/h")).toBe(join("/h", ".contextforge", "sessions"));
+    // NOT ~/.contextforge: that is the project-link FILE name (a project rooted at $HOME would collide)
+    expect(sessionsDir("/h")).toBe(join("/h", ".contextforge-mcp", "sessions"));
   });
 
   it("appends one JSON line per prompt, flattened, with turn and cwd", () => {
@@ -95,6 +96,27 @@ describe("objective hook script", () => {
     runHook(script, home, JSON.stringify({ session_id: "big", prompt: "one more prompt" }));
     expect(readFileSync(sessionFile("big"), "utf-8")).toHaveLength(64 * 1024);
   });
+
+  it("records what arrived when the writer never closes stdin (exits 0 on its own)", () => {
+    const { spawn } = require("child_process") as typeof import("child_process");
+    const t0 = Date.now();
+    const child = spawn(process.execPath, [script], { env: { ...process.env, CONTEXTFORGE_HOME: home }, stdio: ["pipe", "pipe", "pipe"] });
+    child.stdin.write(JSON.stringify({ session_id: "open", prompt: "stdin never closed but the prompt arrived" }));
+    // do NOT end stdin
+    return new Promise<void>((resolve, reject) => {
+      child.on("exit", (code) => {
+        try {
+          expect(code).toBe(0);
+          expect(Date.now() - t0).toBeLessThan(6000);
+          const entry = JSON.parse(readFileSync(sessionFile("open"), "utf-8").trim());
+          expect(entry.prompt).toBe("stdin never closed but the prompt arrived");
+          resolve();
+        } catch (e) {
+          reject(e);
+        }
+      });
+    });
+  }, 10_000);
 
   it("never throws when the home dir cannot be created (prints nothing, exit 0)", () => {
     // A regular file where the home dir should be → mkdirSync fails with ENOTDIR.

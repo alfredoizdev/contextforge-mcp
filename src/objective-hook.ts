@@ -16,14 +16,29 @@ import { join } from "path";
 export const OBJECTIVE_HOOK_RELATIVE_PATH = ".claude/hooks/contextforge-objective.cjs";
 
 /** Exact hook command written by `init`. Keep in sync with README. */
-export const OBJECTIVE_HOOK_COMMAND = 'node "$CLAUDE_PROJECT_DIR/.claude/hooks/contextforge-objective.cjs"';
+// `2>/dev/null || true`: if node is missing from the hook's PATH or
+// $CLAUDE_PROJECT_DIR is unset, bash would otherwise print an error that
+// Claude Code surfaces on EVERY prompt. The script itself never fails.
+export const OBJECTIVE_HOOK_COMMAND =
+  'node "$CLAUDE_PROJECT_DIR/.claude/hooks/contextforge-objective.cjs" 2>/dev/null || true';
 
 /** Seconds; Claude Code's own default for UserPromptSubmit is 30 s. */
 export const OBJECTIVE_HOOK_TIMEOUT_S = 5;
 
+/**
+ * Local state directory for the hooks. Deliberately NOT `~/.contextforge`:
+ * `.contextforge` is the project-link FILE name, and a project rooted at
+ * `$HOME` would collide with it.
+ */
+export const LOCAL_STATE_DIRNAME = ".contextforge-mcp";
+
+export function localStateDir(homeDir: string): string {
+  return join(homeDir, LOCAL_STATE_DIRNAME);
+}
+
 /** Where session prompt logs live. `CONTEXTFORGE_HOME` overrides the home dir (tests). */
 export function sessionsDir(homeDir: string): string {
-  return join(homeDir, ".contextforge", "sessions");
+  return join(localStateDir(homeDir), "sessions");
 }
 
 export const OBJECTIVE_HOOK_VERSION = 1;
@@ -37,11 +52,12 @@ export const OBJECTIVE_HOOK_SCRIPT = `// contextforge-mcp objective hook v${OBJE
 // Safe to commit. Regenerate with \`npx contextforge-mcp init\`.
 //
 // Runs on Claude Code's UserPromptSubmit event and appends the prompt to
-// ~/.contextforge/sessions/<session_id>.jsonl (local only, never uploaded) so
-// that \`contextforge-mcp recall\` can put the session objective back into the
-// context after a compaction. Prints nothing and always exits 0, so it can
-// never block or slow a prompt. To disable, remove the UserPromptSubmit hook
-// group from .claude/settings.json.
+// ~/.contextforge-mcp/sessions/<session_id>.jsonl on this machine, so that
+// \`contextforge-mcp recall\` can put the session objective back into the
+// context after a compaction (recall sends that objective, up to 600 chars,
+// to ContextForge as the search query; the log itself is never uploaded).
+// Prints nothing and always exits 0, so it can never block or slow a prompt.
+// To disable, remove the UserPromptSubmit hook group from .claude/settings.json.
 "use strict";
 var MAX_PROMPT_CHARS = 600;
 var MAX_FILE_BYTES = 64 * 1024;
@@ -59,7 +75,7 @@ function record(raw) {
     var path = require("path");
     var os = require("os");
     var home = process.env.CONTEXTFORGE_HOME || os.homedir();
-    var dir = path.join(home, ".contextforge", "sessions");
+    var dir = path.join(home, ".contextforge-mcp", "sessions");
     fs.mkdirSync(dir, { recursive: true });
     var file = path.join(dir, sid + ".jsonl");
     try {
@@ -89,6 +105,8 @@ process.stdin.on("error", function () {
   process.exit(0);
 });
 setTimeout(function () {
+  // Writer never closed stdin: keep what arrived rather than dropping it.
+  record(buf);
   process.exit(0);
 }, 3000).unref();
 `;

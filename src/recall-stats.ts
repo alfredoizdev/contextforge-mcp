@@ -1,12 +1,13 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import { join } from "path";
+import { localStateDir } from "./objective-hook.js";
 
 /**
  * Local-only measurement of the post-compaction recall (0.13.0).
  *
  * Question it answers (raised by readers of the compaction article): after a
  * recall, does the agent actually call `memory_query` for anything older
- * than the re-injected block? Two small JSONL files under ~/.contextforge:
+ * than the re-injected block? Two small JSONL files under ~/.contextforge-mcp:
  *   recall-events.jsonl     one line per `contextforge-mcp recall` run
  *   recall-followups.jsonl  one line per recall that was followed by a
  *                           memory_query (same cwd) within 15 minutes
@@ -46,7 +47,7 @@ export interface RecallStats {
 }
 
 function statsDir(homeDir: string): string {
-  return join(homeDir, ".contextforge");
+  return localStateDir(homeDir);
 }
 export function recallEventsFile(homeDir: string): string {
   return join(statsDir(homeDir), "recall-events.jsonl");
@@ -83,16 +84,20 @@ function appendLine(file: string, obj: unknown): void {
   appendFileSync(file, JSON.stringify(obj) + "\n", { mode: 0o600 });
 }
 
-/** Append one recall event; rewrite keeping the last 5,000 lines when the cap is exceeded. */
+/** Append a line and rewrite keeping the last 5,000 when the cap is exceeded. */
+function appendCapped(file: string, obj: unknown): void {
+  appendLine(file, obj);
+  const raw = readFileSync(file, "utf-8");
+  const lines = raw.split("\n").filter((l) => l.trim());
+  if (lines.length > MAX_EVENT_LINES) {
+    writeFileSync(file, lines.slice(-MAX_EVENT_LINES).join("\n") + "\n", { mode: 0o600 });
+  }
+}
+
+/** Append one recall event (capped at 5,000 lines). Never throws. */
 export function recordRecallEvent(homeDir: string, ev: RecallEvent): void {
   try {
-    const file = recallEventsFile(homeDir);
-    appendLine(file, ev);
-    const raw = readFileSync(file, "utf-8");
-    const lines = raw.split("\n").filter((l) => l.trim());
-    if (lines.length > MAX_EVENT_LINES) {
-      writeFileSync(file, lines.slice(-MAX_EVENT_LINES).join("\n") + "\n", { mode: 0o600 });
-    }
+    appendCapped(recallEventsFile(homeDir), ev);
   } catch {
     /* best-effort */
   }
@@ -119,7 +124,7 @@ export function recordRecallFollowup(opts: { homeDir: string; cwd: string; now: 
     if (delta < 0 || delta > FOLLOWUP_WINDOW_MS) return false;
     const existing = readJsonl<Followup>(recallFollowupsFile(opts.homeDir), SCAN_TAIL_BYTES);
     if (existing.some((f) => f && f.recall_t === last!.t && f.cwd === opts.cwd)) return false;
-    appendLine(recallFollowupsFile(opts.homeDir), { recall_t: last.t, query_t: opts.now, cwd: opts.cwd } satisfies Followup);
+    appendCapped(recallFollowupsFile(opts.homeDir), { recall_t: last.t, query_t: opts.now, cwd: opts.cwd } satisfies Followup);
     return true;
   } catch {
     return false;
@@ -166,7 +171,7 @@ function pct(n: number, d: number): string {
 
 export function formatRecallStats(s: RecallStats): string {
   const lines = [
-    `ContextForge recall stats (local, ~/.contextforge/recall-*.jsonl)`,
+    `ContextForge recall stats (local, ~/.contextforge-mcp/recall-*.jsonl; approximate — a query is matched to the latest recall in the same directory)`,
     `Recalls (last ${s.windowDays} days): ${s.recalls}`,
     `  with a session objective: ${s.withObjective} (${pct(s.withObjective, s.recalls)})`,
     `  with relevant memories: ${s.withRelevant} (${pct(s.withRelevant, s.recalls)})`,

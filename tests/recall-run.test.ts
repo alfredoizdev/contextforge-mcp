@@ -205,11 +205,55 @@ describe("runRecall 0.13.0 (objective + relevance)", () => {
   });
 
   it("is byte-identical to 0.12.0 when there is no session log, no git and no query support", async () => {
-    const out = await runRecall({ cwd, env, homeDir: home, makeClient: () => fakeClient(), collectGit: () => null });
-    expect(out).toContain("## ContextForge: context restored after compaction");
-    expect(out).not.toContain("Session objective");
+    const out = await runRecall({ cwd, env, homeDir: home, sessionId: "missing", makeClient: () => fakeClient(), collectGit: () => null });
+    expect(out).toBe(
+      "## ContextForge: context restored after compaction\n" +
+        'The conversation was just compacted. These are the most recent saved memories for project "MCP-memory". Treat them as current decisions.\n' +
+        "\nRecent memories:\n" +
+        "- [Infra] Infra note — p3\n" +
+        "- [Decisions] In project — p1\n" +
+        "\nPending tasks:\n" +
+        "- [abc] Do thing (high)\n" +
+        "\nFor anything older or more specific, call memory_query before answering.\n",
+    );
+  });
+
+  it("a query that never resolves cannot erase the 0.12.0 block (own 4 s deadline, here 50 ms)", async () => {
+    writeSession("sess-hang", ["Refactor the auth middleware to use the session table"]);
+    const hanging: RecallClient = { ...fakeClient(), query: () => new Promise(() => {}) };
+    const t0 = Date.now();
+    const out = await runRecall({ cwd, env, homeDir: home, sessionId: "sess-hang", makeClient: () => hanging, collectGit: () => null, relevanceTimeoutMs: 50 });
+    expect(Date.now() - t0).toBeLessThan(2000);
+    expect(out).toContain("Session objective");
+    expect(out).toContain("Recent memories:\n- [Infra] Infra note — p3");
+    expect(out).toContain("Pending tasks:");
     expect(out).not.toContain("Relevant to current work");
-    expect(out).toContain("- [Decisions] In project — p1");
+  });
+
+  it("does not spend a metered query for git-only context on a default branch, but does on a feature branch", async () => {
+    let calls = 0;
+    const counting: RecallClient = { ...fakeClient(), query: async () => { calls++; return { results: [] }; } };
+    const main: GitSignals = { branch: "main", commits: ["chore: bump"], changedFiles: ["package.json"] };
+    await runRecall({ cwd, env, homeDir: home, sessionId: "missing", makeClient: () => counting, collectGit: () => main });
+    expect(calls).toBe(0);
+    await runRecall({ cwd, env, homeDir: home, sessionId: "missing", makeClient: () => counting, collectGit: () => git });
+    expect(calls).toBe(1);
+  });
+
+  it("honors CONTEXTFORGE_RECALL_RELEVANCE=0 as a kill switch", async () => {
+    writeSession("sess-off", ["Refactor the auth middleware to use the session table"]);
+    let calls = 0;
+    const counting: RecallClient = { ...fakeClient(), query: async () => { calls++; return { results: [] }; } };
+    const out = await runRecall({ cwd, env: { ...env, CONTEXTFORGE_RECALL_RELEVANCE: "0" }, homeDir: home, sessionId: "sess-off", makeClient: () => counting, collectGit: () => git });
+    expect(calls).toBe(0);
+    expect(out).toContain("Session objective");
+  });
+
+  it("does not print an untitled relevant memory twice", async () => {
+    writeSession("sess-untitled", ["Investigate the nightly import job slowness"]);
+    const client: RecallClient = { ...fakeClient(), query: async () => ({ results: [{ id: "u", content: "untitled content here", score: 0.9 }] }) };
+    const out = await runRecall({ cwd, env, homeDir: home, sessionId: "sess-untitled", makeClient: () => client, collectGit: () => null });
+    expect(out).toContain("Relevant to current work:\n- untitled content here\n");
   });
 
   it("falls back to the plain block when query throws, and never calls query without a working context", async () => {

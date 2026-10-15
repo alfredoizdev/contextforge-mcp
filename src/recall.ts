@@ -77,6 +77,11 @@ export const RECALL_MAX_RELEVANT = 5;
 /** Stricter than the API default (0.35) to keep the block short. */
 export const RECALL_RELEVANT_MIN_SCORE = 0.4;
 const RECALL_QUERY_LIMIT = 8;
+/** The semantic query gets its own deadline so a slow backend can never erase the rest of the block. */
+export const RECALL_RELEVANCE_TIMEOUT_MS = 4000;
+/** Set CONTEXTFORGE_RECALL_RELEVANCE=0 to never run the semantic query. */
+export const RECALL_RELEVANCE_ENV = "CONTEXTFORGE_RECALL_RELEVANCE";
+const DEFAULT_BRANCH_RE = /^(main|master|HEAD|develop|dev|trunk)$/i;
 /** Session logs older than this are deleted on each recall (best-effort). */
 const SESSION_LOG_RETENTION_MS = 14 * 24 * 3600 * 1000;
 const SESSION_PRUNE_MAX_FILES = 200;
@@ -215,6 +220,8 @@ export async function runRecall(opts: {
   sessionId?: string;
   /** Injectable for tests; defaults to collectGitSignals. */
   collectGit?: (cwd: string) => GitSignals | null;
+  /** Deadline for the semantic query alone (tests); defaults to RECALL_RELEVANCE_TIMEOUT_MS. */
+  relevanceTimeoutMs?: number;
 }): Promise<string> {
   const startedAt = Date.now();
   try {
@@ -245,7 +252,14 @@ export async function runRecall(opts: {
     } catch {
       git = null;
     }
-    const workingContext = buildWorkingContext({ objective, latest, git });
+    // The semantic query is metered on the backend, so it only runs when the
+    // signals are worth it: a session objective, or work on a non-default
+    // branch. Git-only context on main ("chore: bump") is noise. Opt out
+    // entirely with CONTEXTFORGE_RECALL_RELEVANCE=0.
+    const relevanceEnabled = !/^(0|false|off|no)$/i.test((opts.env[RECALL_RELEVANCE_ENV] ?? "").trim());
+    const onFeatureBranch = !!git?.branch && !DEFAULT_BRANCH_RE.test(git.branch.trim());
+    const workingContext =
+      relevanceEnabled && (objective || onFeatureBranch) ? buildWorkingContext({ objective, latest, git }) : "";
     pruneSessionFiles(opts.homeDir);
 
     const work = (async () => {
@@ -270,19 +284,22 @@ export async function runRecall(opts: {
 
       const relevantP: Promise<RelevantItem[]> =
         workingContext && typeof client.query === "function"
-          ? client
-              .query({
+          ? withTimeout(
+              client.query({
                 query: workingContext,
                 project_id: link.project_id,
                 limit: RECALL_QUERY_LIMIT,
                 min_score: RECALL_RELEVANT_MIN_SCORE,
-              })
+              }),
+              opts.relevanceTimeoutMs ?? RECALL_RELEVANCE_TIMEOUT_MS,
+            )
               .then((res) =>
                 (res?.results ?? [])
                   .filter((r) => r && typeof r.content === "string")
                   .sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
                   .slice(0, RECALL_MAX_RELEVANT)
-                  .map((r) => ({ id: r.id, title: r.title || oneLine(r.content), preview: r.content })),
+                  // An untitled memory uses its content as the title; don't print it twice.
+                  .map((r) => ({ id: r.id, title: r.title || oneLine(r.content), preview: r.title ? r.content : "" })),
               )
               .catch(() => [] as RelevantItem[])
           : Promise.resolve([] as RelevantItem[]);
@@ -396,7 +413,7 @@ export function parseHookInput(raw: string): { session_id?: string; cwd?: string
 // 0.13.0 — session objective (from the UserPromptSubmit hook log)
 // ===========================================================================
 
-/** One line of `~/.contextforge/sessions/<session_id>.jsonl`, as written by the objective hook. */
+/** One line of `~/.contextforge-mcp/sessions/<session_id>.jsonl`, as written by the objective hook. */
 export interface SessionPromptEntry {
   t: number;
   turn: number | null;
@@ -561,7 +578,9 @@ export function collectGitSignals(cwd: string): GitSignals | null {
       .filter(Boolean);
     // Porcelain v1 lines are "XY <path>" (two status chars, a space, the path);
     // the first line may start with a space, so the output must not be trimmed.
-    const changedFiles = (gitOut(["status", "--porcelain", "--untracked-files=all"], cwd, { trim: false }) ?? "")
+    // --no-optional-locks: never write the index under the 1.5 s kill; "normal"
+    // untracked mode keeps the signal without enumerating whole build dirs.
+    const changedFiles = (gitOut(["--no-optional-locks", "status", "--porcelain", "--untracked-files=normal"], cwd, { trim: false }) ?? "")
       .split("\n")
       .map((l) => (l.length > 3 ? l.slice(3) : ""))
       .map((f) => (f.includes(" -> ") ? f.split(" -> ")[1] : f))

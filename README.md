@@ -121,7 +121,7 @@ By default, `init` auto-detects which editor your project uses and writes three 
 - **Session Presence rules** — make parallel sessions check for each other at conversation start and before big changes
 - **Startup Context rules** — load a short project summary (overview, open tasks, live sessions) from ContextForge at the start of every conversation
 - **Post-compaction recall hook** (Claude Code only) — a `SessionStart` hook with matcher `compact` in `.claude/settings.json`. When Claude Code compacts a long conversation, the hook runs `npx -y contextforge-mcp recall` and re-injects the session objective, memories relevant to what you are working on, your project's 10 most recent memories and pending tasks, so decisions saved in ContextForge survive the summary.
-- **Session objective hook** (Claude Code only, 0.13.0) — a `UserPromptSubmit` hook that runs the generated script `.claude/hooks/contextforge-objective.cjs` with plain `node` (~50 ms). It records your prompts to `~/.contextforge/sessions/<session_id>.jsonl` on your machine, so `recall` can put the session's objective back after a compaction. Nothing is uploaded; the file is pruned after 14 days.
+- **Session objective hook** (Claude Code only, 0.13.0) — a `UserPromptSubmit` hook that runs the generated script `.claude/hooks/contextforge-objective.cjs` with plain `node` (~50 ms). It records your prompts to `~/.contextforge-mcp/sessions/<session_id>.jsonl` on your machine, so `recall` can put the session's objective back after a compaction. The log is pruned after 14 days and never uploaded; see the privacy note below for what `recall` sends.
 
 Files written:
 
@@ -159,6 +159,8 @@ Long sessions get compacted: Claude Code summarizes the conversation to free spa
 1. **Objective hook** (`UserPromptSubmit`) — records each prompt locally so the session's first real request is never lost to the summary.
 2. **Recall hook** (`SessionStart`, matcher `compact`) — fires right after every compaction and prints back, in this order: the session objective and the latest request before the cut; up to 5 memories relevant to the current work (semantic search over the objective, git branch, recent commit subjects and changed files, whatever their age); the project's 10 most recent memories; up to 5 pending tasks; and a reminder to call `memory_query` for anything older. The whole block stays around 4 KB and is injected once, never pinned, so it does not move the compaction trigger.
 
+The relevance search is one metered query per compaction. It only runs when there is a session objective or you are on a non-default branch (git-only context on `main` is noise), it has its own 4-second deadline so a slow search can never drop the rest of the block, and `CONTEXTFORGE_RECALL_RELEVANCE=0` in the environment turns it off entirely.
+
 The hooks run as plain shell commands, so `recall` reads your API key from `CONTEXTFORGE_API_KEY` if set, otherwise from the `contextforge` server entry in `~/.claude.json` (where `claude mcp add` stores it), otherwise from a project `.mcp.json`. It needs a linked project (`.contextforge` in the repo root). If anything is missing it prints nothing and never blocks the session. Note that a `CONTEXTFORGE_API_KEY` exported in your shell profile wins over `~/.claude.json`: if it holds an old key, recall silently prints nothing.
 
 Try it by hand from your project directory:
@@ -168,7 +170,7 @@ npx contextforge-mcp recall           # prints the block for the newest session 
 npx contextforge-mcp recall --stats   # local numbers: recalls, objective coverage, follow-up queries
 ```
 
-Privacy: prompts and recall events are stored only under `~/.contextforge/` on your machine and are never uploaded. To opt out of prompt recording, remove the `UserPromptSubmit` group from `.claude/settings.json`.
+Privacy: the prompt log and the recall stats live under `~/.contextforge-mcp/` on your machine and are never uploaded. What leaves the machine: after a compaction, `recall` sends the session objective (at most 600 characters, together with the git branch, recent commit subjects and changed file names) to ContextForge as the search query, the same way `memory_query` sends a query; it is not stored. Note that `.claude/settings.json` is usually committed, so teammates who pull the repo get the prompt hook too; they can remove the `UserPromptSubmit` group to opt out.
 
 #### Already using ContextForge? (existing users)
 
