@@ -66,7 +66,7 @@ import { appendFileSync } from "fs";
 import { createRequire } from "module";
 import { basename } from "path";
 import { homedir } from "os";
-import { runRecall } from "./recall.js";
+import { runRecall, readStdinBounded, parseHookInput } from "./recall.js";
 import { checkForUpdates, getUpdateNotice } from "./update-checker.js";
 import { formatIngestResult } from "./format-ingest.js";
 import { buildRoutingHint } from "./space-routing.js";
@@ -157,10 +157,15 @@ if (process.argv[2] === "init") {
 // memories + pending tasks so Claude Code re-injects them after compaction.
 // Must never fail: any problem prints nothing and exits 0.
 if (process.argv[2] === "recall") {
+  // Claude Code pipes the hook input ({ session_id, cwd, source, … }) on
+  // stdin. Wait at most 300 ms for it; a manual run from a terminal has a
+  // TTY and skips the wait entirely.
+  const hookInput = parseHookInput(await readStdinBounded(process.stdin, 300));
   const block = await runRecall({
     cwd: process.cwd(),
     env: process.env,
     homeDir: homedir(),
+    sessionId: hookInput.session_id,
   });
   if (block) process.stdout.write(block);
   process.exit(0);

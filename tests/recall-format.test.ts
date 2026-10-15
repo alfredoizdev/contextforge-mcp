@@ -68,3 +68,66 @@ describe("formatRecall", () => {
     expect(out).toContain("memory_query");
   });
 });
+
+// ---------------------------------------------------------------------------
+// 0.13.0: objective + relevant sections (absent inputs → unchanged block)
+// ---------------------------------------------------------------------------
+describe("formatRecall 0.13.0 sections", () => {
+  const base = {
+    projectName: "P",
+    items: [{ id: "i1", title: "Recent one", content_preview: "r1", space: "Decisions", created_at: "2026-10-01T00:00:00Z" }],
+    tasks: [],
+  };
+
+  it("prints the objective and latest request right after the intro line", () => {
+    const out = formatRecall({ ...base, objective: "Move retry into the client", latest: "add a backoff test" });
+    const lines = out.split("\n");
+    expect(lines[0]).toBe("## ContextForge: context restored after compaction");
+    expect(lines[2]).toBe("");
+    expect(lines[3]).toBe('Session objective (the user\'s first request): "Move retry into the client"');
+    expect(lines[4]).toBe('Latest request before compaction: "add a backoff test"');
+    expect(out).toContain("\nRecent memories:\n- [Decisions] Recent one — r1\n");
+  });
+
+  it("omits the latest line when only the objective is known", () => {
+    const out = formatRecall({ ...base, objective: "Move retry into the client" });
+    expect(out).toContain('Session objective (the user\'s first request): "Move retry into the client"\n\nRecent memories:');
+    expect(out).not.toContain("Latest request");
+  });
+
+  it("prints relevant hits before recent memories, with a git summary when available", () => {
+    const out = formatRecall({
+      ...base,
+      relevant: [{ id: "x", title: "Old but relevant", preview: "decided in May", space: "Decisions" }],
+      gitSummary: { branch: "feat/retry", changedFiles: 2 },
+    });
+    expect(out).toContain("\nRelevant to current work (branch feat/retry, 2 changed files):\n- [Decisions] Old but relevant — decided in May\n\nRecent memories:");
+  });
+
+  it("uses a plain header without git, singular file count, and no space label when unknown", () => {
+    const out = formatRecall({ ...base, relevant: [{ title: "No space", preview: "p" }] });
+    expect(out).toContain("\nRelevant to current work:\n- No space — p\n");
+    const one = formatRecall({ ...base, relevant: [{ title: "T", preview: "" }], gitSummary: { branch: "b", changedFiles: 1 } });
+    expect(one).toContain("(branch b, 1 changed file):\n- T\n");
+  });
+
+  it("returns a block when only an objective is known (no items, no tasks)", () => {
+    const out = formatRecall({ projectName: "P", items: [], tasks: [], objective: "Ship the thing today" });
+    expect(out).toContain('Session objective (the user\'s first request): "Ship the thing today"');
+    expect(out).toContain("call memory_query before answering");
+    expect(out).not.toContain("Recent memories");
+  });
+
+  it("caps relevant at 5 and previews at 160 chars; worst case stays well under the 10,000-char hook cap", () => {
+    const long = "x".repeat(1000);
+    const out = formatRecall({
+      projectName: "P",
+      objective: long, latest: long,
+      relevant: Array.from({ length: 9 }, (_, i) => ({ id: `r${i}`, title: long, preview: long, space: "S" })),
+      items: Array.from({ length: 20 }, (_, i) => ({ id: `i${i}`, title: long, content_preview: long, space: "S", created_at: "2026-10-01T00:00:00Z" })),
+      tasks: Array.from({ length: 9 }, (_, i) => ({ short_id: `t${i}`, title: long, priority: "high" })),
+    });
+    expect((out.match(/^- /gm) ?? []).length).toBe(5 + 10 + 5);
+    expect(out.length).toBeLessThan(8000);
+  });
+});

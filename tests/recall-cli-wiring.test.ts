@@ -23,3 +23,13 @@ describe("recall CLI wiring (source-level)", () => {
     expect(block).not.toContain("process.exit(1)");
   });
 });
+
+describe("recall CLI wiring 0.13.0 (source-level)", () => {
+  const block = src.slice(src.indexOf('process.argv[2] === "recall"'), src.indexOf("// ============ Logger with Colors"));
+
+  it("reads stdin with a bounded wait and forwards the hook's session_id", () => {
+    expect(src).toMatch(/import \{[^}]*\breadStdinBounded\b[^}]*\} from "\.\/recall\.js"/);
+    expect(block).toContain("readStdinBounded(process.stdin");
+    expect(block).toContain("sessionId:");
+  });
+});

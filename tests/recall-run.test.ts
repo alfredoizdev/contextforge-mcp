@@ -151,3 +151,150 @@ describe("runRecall", () => {
     expect(urls[1]).toBe("https://byzngcpqiqmqpxpmnhmo.supabase.co");
   });
 });
+
+// ---------------------------------------------------------------------------
+// 0.13.0: objective from the session log + relevance query + stdin reader
+// ---------------------------------------------------------------------------
+import { mkdirSync } from "fs";
+import { PassThrough } from "stream";
+import { readStdinBounded, parseHookInput, type GitSignals } from "../src/recall.js";
+import { sessionsDir } from "../src/objective-hook.js";
+
+describe("runRecall 0.13.0 (objective + relevance)", () => {
+  let cwd: string;
+  let home: string;
+  const env = { CONTEXTFORGE_API_KEY: "k" };
+  const git: GitSignals = { branch: "feat/retry", commits: ["move retry into client"], changedFiles: ["src/retry.ts"] };
+
+  const writeSession = (sid: string, prompts: string[]) => {
+    mkdirSync(sessionsDir(home), { recursive: true });
+    writeFileSync(
+      join(sessionsDir(home), `${sid}.jsonl`),
+      prompts.map((p, i) => JSON.stringify({ t: 1000 + i, turn: i + 1, cwd, prompt: p })).join("\n") + "\n",
+    );
+  };
+
+  beforeEach(() => {
+    cwd = mkdtempSync(join(tmpdir(), "cf-recall2-"));
+    home = mkdtempSync(join(tmpdir(), "cf-recall2-home-"));
+    linkProject(cwd);
+  });
+  afterEach(() => {
+    rmSync(cwd, { recursive: true, force: true });
+    rmSync(home, { recursive: true, force: true });
+  });
+
+  it("restores the objective from the session log and queries with it", async () => {
+    writeSession("sess-1", ["hola", "Move the payment retry logic into the client", "ok", "now add a backoff test please"]);
+    const seen: string[] = [];
+    const client: RecallClient = {
+      ...fakeClient(),
+      query: async (input) => {
+        seen.push(input.query);
+        return { results: [{ id: "old-1", title: "Retry lives in the client", content: "Decided in May: handler stays dumb", score: 0.8 }] };
+      },
+    };
+    const out = await runRecall({ cwd, env, homeDir: home, sessionId: "sess-1", makeClient: () => client, collectGit: () => git });
+    expect(out).toContain('Session objective (the user\'s first request): "Move the payment retry logic into the client"');
+    expect(out).toContain('Latest request before compaction: "now add a backoff test please"');
+    expect(out).toContain("Relevant to current work (branch feat/retry, 1 changed file):\n- Retry lives in the client — Decided in May: handler stays dumb");
+    expect(seen).toHaveLength(1);
+    expect(seen[0]).toContain("Move the payment retry logic into the client");
+    expect(seen[0]).toContain("feat retry");
+    expect(seen[0]).toContain("src/retry.ts");
+  });
+
+  it("is byte-identical to 0.12.0 when there is no session log, no git and no query support", async () => {
+    const out = await runRecall({ cwd, env, homeDir: home, makeClient: () => fakeClient(), collectGit: () => null });
+    expect(out).toContain("## ContextForge: context restored after compaction");
+    expect(out).not.toContain("Session objective");
+    expect(out).not.toContain("Relevant to current work");
+    expect(out).toContain("- [Decisions] In project — p1");
+  });
+
+  it("falls back to the plain block when query throws, and never calls query without a working context", async () => {
+    writeSession("sess-2", ["Refactor the auth middleware to use the session table"]);
+    let calls = 0;
+    const throwing: RecallClient = { ...fakeClient(), query: async () => { calls++; throw new Error("boom"); } };
+    const out = await runRecall({ cwd, env, homeDir: home, sessionId: "sess-2", makeClient: () => throwing, collectGit: () => null });
+    expect(calls).toBe(1);
+    expect(out).toContain("Session objective");
+    expect(out).not.toContain("Relevant to current work");
+    expect(out).toContain("Recent memories:");
+
+    // an unknown session id → no objective; no git → no working context → query is never called
+    calls = 0;
+    await runRecall({ cwd, env, homeDir: home, sessionId: "missing", makeClient: () => throwing, collectGit: () => null });
+    expect(calls).toBe(0);
+  });
+
+  it("treats a query response without results as empty and dedups recent items that are also relevant", async () => {
+    writeSession("sess-3", ["Keep working on the infra note cleanup task"]);
+    const client: RecallClient = {
+      ...fakeClient(),
+      listItems: async (spaceId) => ({
+        items: spaceId === "sp-infra"
+          ? [{ id: "dup", title: "Infra note", content_preview: "p3", space: "Infra", created_at: "2026-09-24T11:00:00Z" }]
+          : [{ id: "k", title: "In project", content_preview: "p1", space: "Decisions", created_at: "2026-09-24T10:00:00Z" }],
+      }),
+      query: async () => ({ results: [{ id: "dup", title: "Infra note", content: "p3 full", score: 0.9 }] }),
+    };
+    const out = await runRecall({ cwd, env, homeDir: home, sessionId: "sess-3", makeClient: () => client, collectGit: () => null });
+    expect(out.match(/Infra note/g)).toHaveLength(1);
+    expect(out).toContain("Relevant to current work:\n- Infra note — p3 full");
+
+    const empty: RecallClient = { ...fakeClient(), query: async () => ({} as any) };
+    const out2 = await runRecall({ cwd, env, homeDir: home, sessionId: "sess-3", makeClient: () => empty, collectGit: () => null });
+    expect(out2).not.toContain("Relevant to current work");
+  });
+
+  it("keeps only the top 5 relevant hits by score", async () => {
+    writeSession("sess-4", ["Investigate why the nightly import job is slow"]);
+    const results = Array.from({ length: 8 }, (_, i) => ({ id: `r${i}`, title: `hit ${i}`, content: "c", score: i / 10 }));
+    const client: RecallClient = { ...fakeClient(), query: async () => ({ results }) };
+    const out = await runRecall({ cwd, env, homeDir: home, sessionId: "sess-4", makeClient: () => client, collectGit: () => null });
+    for (const i of [7, 6, 5, 4, 3]) expect(out).toContain(`hit ${i}`);
+    for (const i of [2, 1, 0]) expect(out).not.toContain(`hit ${i} `);
+    expect(out.indexOf("hit 7")).toBeLessThan(out.indexOf("hit 3"));
+  });
+
+  it("prunes session logs older than 14 days but keeps fresh ones", async () => {
+    writeSession("fresh", ["Fresh session about something useful"]);
+    writeSession("stale", ["Stale session about something useful"]);
+    const old = new Date(Date.now() - 20 * 24 * 3600 * 1000);
+    const { utimesSync, existsSync } = await import("fs");
+    utimesSync(join(sessionsDir(home), "stale.jsonl"), old, old);
+    await runRecall({ cwd, env, homeDir: home, sessionId: "fresh", makeClient: () => fakeClient(), collectGit: () => null });
+    expect(existsSync(join(sessionsDir(home), "stale.jsonl"))).toBe(false);
+    expect(existsSync(join(sessionsDir(home), "fresh.jsonl"))).toBe(true);
+  });
+});
+
+describe("readStdinBounded / parseHookInput", () => {
+  it("returns the piped text once the stream ends", async () => {
+    const s = new PassThrough();
+    const p = readStdinBounded(s as any, 1000);
+    s.end('{"session_id":"abc","cwd":"/x"}');
+    expect(await p).toBe('{"session_id":"abc","cwd":"/x"}');
+  });
+
+  it("gives up after the deadline when the stream never ends", async () => {
+    const s = new PassThrough();
+    s.write("partial");
+    const t0 = Date.now();
+    expect(await readStdinBounded(s as any, 120)).toBe("partial");
+    expect(Date.now() - t0).toBeLessThan(1000);
+  });
+
+  it("returns empty for a TTY without touching it", async () => {
+    const s = Object.assign(new PassThrough(), { isTTY: true });
+    expect(await readStdinBounded(s as any, 50)).toBe("");
+  });
+
+  it("parses session_id and cwd, tolerating junk", () => {
+    expect(parseHookInput('{"session_id":"abc","cwd":"/x","source":"compact"}')).toEqual({ session_id: "abc", cwd: "/x" });
+    expect(parseHookInput("not json")).toEqual({});
+    expect(parseHookInput("")).toEqual({});
+    expect(parseHookInput('{"session_id":7}')).toEqual({});
+  });
+});
