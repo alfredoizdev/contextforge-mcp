@@ -115,18 +115,20 @@ Set up your project so your AI editor always prefers ContextForge memory:
 npx contextforge-mcp init
 ```
 
-By default, `init` auto-detects which editor your project uses and writes three rule sections and one hook:
+By default, `init` auto-detects which editor your project uses and writes three rule sections and two hooks:
 
 - **Memory rules** — route memory questions to ContextForge instead of the built-in file memory
 - **Session Presence rules** — make parallel sessions check for each other at conversation start and before big changes
 - **Startup Context rules** — load a short project summary (overview, open tasks, live sessions) from ContextForge at the start of every conversation
-- **Post-compaction recall hook** (Claude Code only) — a `SessionStart` hook with matcher `compact` in `.claude/settings.json`. When Claude Code compacts a long conversation, the hook runs `npx -y contextforge-mcp recall` and re-injects your project's 10 most recent memories and pending tasks, so decisions saved in ContextForge survive the summary.
+- **Post-compaction recall hook** (Claude Code only) — a `SessionStart` hook with matcher `compact` in `.claude/settings.json`. When Claude Code compacts a long conversation, the hook runs `npx -y contextforge-mcp recall` and re-injects the session objective, memories relevant to what you are working on, your project's 10 most recent memories and pending tasks, so decisions saved in ContextForge survive the summary.
+- **Session objective hook** (Claude Code only, 0.13.0) — a `UserPromptSubmit` hook that runs the generated script `.claude/hooks/contextforge-objective.cjs` with plain `node` (~50 ms). It records your prompts to `~/.contextforge/sessions/<session_id>.jsonl` on your machine, so `recall` can put the session's objective back after a compaction. Nothing is uploaded; the file is pruned after 14 days.
 
 Files written:
 
 - `CLAUDE.md` for Claude Code (signals: existing `CLAUDE.md` or `.claude/` directory)
 - `.cursorrules` for Cursor (signals: existing `.cursorrules` or `.cursor/` directory)
-- `.claude/settings.json` for Claude Code — merged, never overwritten; only the recall hook is added
+- `.claude/settings.json` for Claude Code — merged, never overwritten; only the two ContextForge hook groups are added
+- `.claude/hooks/contextforge-objective.cjs` for Claude Code — the generated objective hook script (safe to commit; refreshed by `init` when a new version ships)
 
 If no editor is detected, both files are generated.
 
@@ -152,15 +154,21 @@ Prints the installed version (e.g. `contextforge-mcp 0.5.2`).
 
 #### Surviving compaction (Claude Code)
 
-Long sessions get compacted: Claude Code summarizes the conversation to free space, and the summary keeps the gist but drops details — usually the decisions. `init` installs a hook that fires right after every compaction and prints your project's most recent ContextForge memories and pending tasks back into the context.
+Long sessions get compacted: Claude Code summarizes the conversation to free space, and the summary keeps the gist but drops details — usually the decisions, and often the task itself. `init` installs two hooks that fix both:
 
-The hook runs as a plain shell command, so it reads your API key from `CONTEXTFORGE_API_KEY` if set, otherwise from the `contextforge` server entry in `~/.claude.json` (where `claude mcp add` stores it), otherwise from a project `.mcp.json`. It needs a linked project (`.contextforge` in the repo root). If anything is missing it prints nothing and never blocks the session.
+1. **Objective hook** (`UserPromptSubmit`) — records each prompt locally so the session's first real request is never lost to the summary.
+2. **Recall hook** (`SessionStart`, matcher `compact`) — fires right after every compaction and prints back, in this order: the session objective and the latest request before the cut; up to 5 memories relevant to the current work (semantic search over the objective, git branch, recent commit subjects and changed files, whatever their age); the project's 10 most recent memories; up to 5 pending tasks; and a reminder to call `memory_query` for anything older. The whole block stays around 4 KB and is injected once, never pinned, so it does not move the compaction trigger.
+
+The hooks run as plain shell commands, so `recall` reads your API key from `CONTEXTFORGE_API_KEY` if set, otherwise from the `contextforge` server entry in `~/.claude.json` (where `claude mcp add` stores it), otherwise from a project `.mcp.json`. It needs a linked project (`.contextforge` in the repo root). If anything is missing it prints nothing and never blocks the session. Note that a `CONTEXTFORGE_API_KEY` exported in your shell profile wins over `~/.claude.json`: if it holds an old key, recall silently prints nothing.
 
 Try it by hand from your project directory:
 
 ```bash
-npx contextforge-mcp recall
+npx contextforge-mcp recall           # prints the block for the newest session in this directory
+npx contextforge-mcp recall --stats   # local numbers: recalls, objective coverage, follow-up queries
 ```
+
+Privacy: prompts and recall events are stored only under `~/.contextforge/` on your machine and are never uploaded. To opt out of prompt recording, remove the `UserPromptSubmit` group from `.claude/settings.json`.
 
 #### Already using ContextForge? (existing users)
 
@@ -170,7 +178,7 @@ Nothing to reconfigure. Update to the latest and restart your AI client:
 npm update -g contextforge-mcp   # only if you installed globally; npx users get it on next launch
 ```
 
-You do **not** need to re-run `init` for the auto-load behavior. To get the post-compaction recall hook, run `npx contextforge-mcp init` once in each project; it only adds what is missing.
+You do **not** need to re-run `init` for the auto-load behavior. To get the post-compaction recall hook and the session objective hook, run `npx contextforge-mcp init` once in each project; it only adds what is missing.
 
 ---
 
