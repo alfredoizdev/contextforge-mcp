@@ -133,3 +133,92 @@ describe("runInit wires the hook for the claude editor only", () => {
     expect(existsSync(join(tmp, ".claude", "settings.json"))).toBe(false);
   });
 });
+
+// ---------------------------------------------------------------------------
+// 0.13.0: objective hook (UserPromptSubmit) installed next to the recall hook
+// ---------------------------------------------------------------------------
+import { installClaudeHooks, installClaudeObjectiveHook } from "../src/init.js";
+import { OBJECTIVE_HOOK_COMMAND, OBJECTIVE_HOOK_SCRIPT } from "../src/objective-hook.js";
+
+describe("installClaudeHooks (recall + objective)", () => {
+  let tmp: string;
+  beforeEach(() => {
+    tmp = mkdtempSync(join(tmpdir(), "cf-hooks2-"));
+  });
+  afterEach(() => {
+    rmSync(tmp, { recursive: true, force: true });
+  });
+  const settingsPath = () => join(tmp, ".claude", "settings.json");
+  const scriptPath = () => join(tmp, ".claude", "hooks", "contextforge-objective.cjs");
+
+  it("creates settings.json with both hook groups and writes the script", () => {
+    const res = installClaudeHooks(tmp);
+    expect(res.recall.action).toBe("created");
+    // recall created settings.json a moment earlier, so the objective group is appended to it
+    expect(res.objective.action).toBe("appended");
+    expect(res.objective.scriptAction).toBe("created");
+    expect(res.objective.scriptPath).toBe(scriptPath());
+    expect(readFileSync(scriptPath(), "utf-8")).toBe(OBJECTIVE_HOOK_SCRIPT);
+    const json = JSON.parse(readFileSync(settingsPath(), "utf-8"));
+    expect(json.hooks.SessionStart).toEqual([
+      { matcher: "compact", hooks: [{ type: "command", command: RECALL_COMMAND }] },
+    ]);
+    expect(json.hooks.UserPromptSubmit).toEqual([
+      { hooks: [{ type: "command", command: OBJECTIVE_HOOK_COMMAND, timeout: 5 }] },
+    ]);
+  });
+
+  it("is idempotent: second run reports already-present and changes nothing", () => {
+    installClaudeHooks(tmp);
+    const before = readFileSync(settingsPath(), "utf-8");
+    const res = installClaudeHooks(tmp);
+    expect(res.recall.action).toBe("already-present");
+    expect(res.objective.action).toBe("already-present");
+    expect(res.objective.scriptAction).toBe("already-present");
+    expect(readFileSync(settingsPath(), "utf-8")).toBe(before);
+  });
+
+  it("upgrades from 0.12.0: recall hook present, objective missing → only the objective group is appended", () => {
+    mkdirSync(join(tmp, ".claude"));
+    writeFileSync(settingsPath(), JSON.stringify({
+      permissions: { allow: ["Bash(ls)"] },
+      hooks: {
+        SessionStart: [{ matcher: "compact", hooks: [{ type: "command", command: RECALL_COMMAND }] }],
+        PreToolUse: [{ matcher: "Bash", hooks: [{ type: "command", command: "echo hi" }] }],
+      },
+    }, null, 2));
+    const res = installClaudeHooks(tmp);
+    expect(res.recall.action).toBe("already-present");
+    expect(res.objective.action).toBe("appended");
+    const json = JSON.parse(readFileSync(settingsPath(), "utf-8"));
+    expect(json.permissions).toEqual({ allow: ["Bash(ls)"] });
+    expect(json.hooks.PreToolUse).toEqual([{ matcher: "Bash", hooks: [{ type: "command", command: "echo hi" }] }]);
+    expect(json.hooks.SessionStart).toHaveLength(1);
+    expect(json.hooks.UserPromptSubmit).toHaveLength(1);
+  });
+
+  it("rewrites an outdated script (reports updated) but leaves an identical one alone", () => {
+    mkdirSync(join(tmp, ".claude", "hooks"), { recursive: true });
+    writeFileSync(scriptPath(), "// old version\n");
+    const res = installClaudeObjectiveHook(tmp);
+    expect(res.scriptAction).toBe("updated");
+    expect(readFileSync(scriptPath(), "utf-8")).toBe(OBJECTIVE_HOOK_SCRIPT);
+    expect(installClaudeObjectiveHook(tmp).scriptAction).toBe("already-present");
+  });
+
+  it("leaves an unparseable settings.json untouched but still writes the script", () => {
+    mkdirSync(join(tmp, ".claude"));
+    writeFileSync(settingsPath(), "{ not json");
+    const res = installClaudeHooks(tmp);
+    expect(res.objective.action).toBe("already-present");
+    expect(readFileSync(settingsPath(), "utf-8")).toBe("{ not json");
+    expect(existsSync(scriptPath())).toBe(true);
+  });
+
+  it("runInit for claude returns both hook results", () => {
+    const [res] = runInit(tmp, { editor: "claude" });
+    expect(res.hook?.action).toBe("created");
+    expect(res.objectiveHook?.action).toBe("appended");
+    expect(res.objectiveHook?.scriptAction).toBe("created");
+  });
+});
