@@ -298,3 +298,22 @@ describe("readStdinBounded / parseHookInput", () => {
     expect(parseHookInput('{"session_id":7}')).toEqual({});
   });
 });
+
+describe("runRecall records a local event", () => {
+  it("writes one recall event with counts after a successful run", async () => {
+    const cwd = mkdtempSync(join(tmpdir(), "cf-recall-ev-"));
+    const home = mkdtempSync(join(tmpdir(), "cf-recall-ev-home-"));
+    try {
+      linkProject(cwd);
+      await runRecall({ cwd, env: { CONTEXTFORGE_API_KEY: "k" }, homeDir: home, sessionId: "none", makeClient: () => fakeClient(), collectGit: () => null });
+      const { recallEventsFile } = await import("../src/recall-stats.js");
+      const { readFileSync } = await import("fs");
+      const ev = JSON.parse(readFileSync(recallEventsFile(home), "utf-8").trim());
+      expect(ev).toMatchObject({ cwd, session_id: "none", objective: false, relevant: 0, recent: 2, tasks: 1 });
+      expect(typeof ev.latency_ms).toBe("number");
+    } finally {
+      rmSync(cwd, { recursive: true, force: true });
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+});

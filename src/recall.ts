@@ -3,6 +3,7 @@ import { join, basename } from "path";
 import { spawnSync } from "child_process";
 import { ApiClient, readProjectLinkConfig } from "./api-client.js";
 import { sessionsDir } from "./objective-hook.js";
+import { recordRecallEvent } from "./recall-stats.js";
 
 /** Exact hook command written by `init`. Keep in sync with README. */
 export const RECALL_COMMAND = "npx -y contextforge-mcp recall";
@@ -215,6 +216,7 @@ export async function runRecall(opts: {
   /** Injectable for tests; defaults to collectGitSignals. */
   collectGit?: (cwd: string) => GitSignals | null;
 }): Promise<string> {
+  const startedAt = Date.now();
   try {
     const apiKey = resolveApiKey({ env: opts.env, homeDir: opts.homeDir, cwd: opts.cwd });
     if (!apiKey) return "";
@@ -294,7 +296,7 @@ export async function runRecall(opts: {
         .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at))
         .slice(0, RECALL_MAX_ITEMS);
 
-      return formatRecall({
+      const block = formatRecall({
         projectName: link.project_name || link.project_id,
         items: scoped,
         tasks,
@@ -303,6 +305,17 @@ export async function runRecall(opts: {
         relevant,
         gitSummary: git ? { branch: git.branch, changedFiles: git.changedFiles.length } : null,
       });
+      recordRecallEvent(opts.homeDir, {
+        t: startedAt,
+        session_id: opts.sessionId,
+        cwd: opts.cwd,
+        objective: !!objective,
+        relevant: relevant.length,
+        recent: scoped.length,
+        tasks: tasks.slice(0, RECALL_MAX_TASKS).length,
+        latency_ms: Date.now() - startedAt,
+      });
+      return block;
     })();
 
     return await withTimeout(work, opts.timeoutMs ?? RECALL_TIMEOUT_MS);
