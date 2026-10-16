@@ -310,12 +310,16 @@ export async function runRecall(opts: {
           ? (() => {
               const t0 = Date.now();
               return withTimeout(
-                client.query({
-                  query: workingContext,
-                  project_id: link.project_id,
-                  limit: RECALL_QUERY_LIMIT,
-                  min_score: RECALL_RELEVANT_MIN_SCORE,
-                }),
+                // Promise.resolve().then(): a client whose query throws synchronously
+                // lands in the .catch below ("error") instead of rejecting `work`.
+                Promise.resolve().then(() =>
+                  client.query!({
+                    query: workingContext,
+                    project_id: link.project_id,
+                    limit: RECALL_QUERY_LIMIT,
+                    min_score: RECALL_RELEVANT_MIN_SCORE,
+                  }),
+                ),
                 Math.min(opts.relevanceTimeoutMs ?? RECALL_RELEVANCE_TIMEOUT_MS, stageMs),
               )
                 .then((res) => {

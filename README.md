@@ -128,7 +128,7 @@ Files written:
 - `CLAUDE.md` for Claude Code (signals: existing `CLAUDE.md` or `.claude/` directory)
 - `.cursorrules` for Cursor (signals: existing `.cursorrules` or `.cursor/` directory)
 - `.claude/settings.json` for Claude Code — merged, never overwritten; only the two ContextForge hook groups are added
-- `.claude/hooks/contextforge-objective.cjs` for Claude Code — the generated objective hook script (safe to commit; refreshed by `init` when a new version ships; prompts that start with an XML-like tag — Claude Code's own system turns — are not logged)
+- `.claude/hooks/contextforge-objective.cjs` for Claude Code — the generated objective hook script (safe to commit; refreshed by `init` when a new version ships; Claude Code's own system turns — prompts that start with an XML-like tag and contain a closing tag — are not logged)
 
 If no editor is detected, both files are generated.
 

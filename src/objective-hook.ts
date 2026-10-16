@@ -44,12 +44,18 @@ export function sessionsDir(homeDir: string): string {
 export const OBJECTIVE_HOOK_VERSION = 2;
 
 /**
- * Prompts that start with an XML-like tag are Claude Code system turns
- * (`<task-notification>`, `<system-reminder>`, `<local-command-stdout>`),
- * not something the user typed. Shared with recall.ts so entries logged by a
- * v1 script are filtered at read time too. Used with the `i` flag.
+ * Claude Code system turns (`<task-notification>…</task-notification>`,
+ * `<system-reminder>…</system-reminder>`, `<local-command-stdout>…`) reach
+ * the hook as prompts. They are tagged blocks: the text starts with an
+ * opening tag AND contains a closing tag. A user prompt that merely begins
+ * with markup ("<div> is not centered, fix it", "<Button /> renders twice")
+ * has no closing tag and is kept. "Contains" rather than "ends with" because
+ * the v1 script logged these turns cut at 600 chars, so the final closing
+ * tag may be missing at read time. Applied to the whitespace-flattened,
+ * trimmed prompt. Shared with recall.ts so entries logged by a v1 script are
+ * filtered at read time too. Used with the `i` flag.
  */
-export const TAG_PREFIX_RE_SOURCE = "^<[a-z][a-z0-9_-]*[\\s>]";
+export const TAG_PREFIX_RE_SOURCE = "^<[a-z][a-z0-9_-]*[\\s>][\\s\\S]*<\\/[a-z][a-z0-9_-]*>";
 
 /**
  * The script body. Hard rules, because its stdout would be injected into the

@@ -85,13 +85,21 @@ describe("objective hook script", () => {
   });
 
   it("0.13.2: still logs prompts that start with a bare '<' or mention a tag later", () => {
-    const ok = ["< 5 items left in the backlog, prioritize them", "<-- see the error above and fix the parser", "wrap the title in a <h1> tag"];
+    const ok = [
+      "< 5 items left in the backlog, prioritize them",
+      "<-- see the error above and fix the parser",
+      "wrap the title in a <h1> tag",
+      // starts with markup but is not a whole tagged block → a real prompt, kept (review finding)
+      "<div> is not centered, fix it",
+      "<Button /> component renders twice on mount, find out why",
+      "<T extends X> generic helper should infer the return type",
+    ];
     for (const prompt of ok) {
       const r = runHook(script, home, JSON.stringify({ session_id: "s-ok", prompt }));
       expect(r.status).toBe(0);
     }
     const lines = readFileSync(sessionFile("s-ok"), "utf-8").trim().split("\n");
-    expect(lines).toHaveLength(3);
+    expect(lines).toHaveLength(6);
   });
 
   it("exits 0 and writes nothing on invalid JSON, missing fields, or empty stdin", () => {

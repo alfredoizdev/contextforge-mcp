@@ -60,6 +60,17 @@ describe("selectObjective", () => {
     expect(res.latest).toBeUndefined();
   });
 
+  it("0.13.2: a system turn cut at the 600-char cap by a v1 script (no final closing tag) is still ignored", () => {
+    const cut = "<task-notification> <task-id>bc8xyom8c</task-id> <output-file>/tmp/x.output</output-file> <status>completed</status> <summary>Background command finished and the summary keeps going until the log cap trims it";
+    const res = selectObjective([e("Move the payment retry logic into the client", 1), e(cut, 2)]);
+    expect(res.latest).toBeUndefined();
+  });
+
+  it("0.13.2: a prompt that merely starts with markup is still a candidate", () => {
+    const res = selectObjective([e("<div> is not centered on mobile, fix the flex layout", 1)]);
+    expect(res.objective).toBe("<div> is not centered on mobile, fix the flex layout");
+  });
+
   it("truncates to 300 characters with an ellipsis", () => {
     const res = selectObjective([e("word ".repeat(200), 1)]);
     // 300 chars max before the ellipsis; trailing whitespace is trimmed first

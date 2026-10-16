@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from "fs";
+import { existsSync, readFileSync, writeFileSync, mkdirSync, openSync, readSync, closeSync } from "fs";
 import { dirname, join } from "path";
 import { homedir } from "os";
 import { STARTUP_MARKER } from "./init.js";
@@ -144,7 +144,7 @@ function hasRecallHook(cwd: string): boolean {
           const command = (h as { command?: unknown })?.command;
           return (
             typeof command === "string" &&
-            command.includes("contextforge-mcp recall")
+            /contextforge-mcp(@\S+)?\s+recall\b/.test(command)
           );
         })
       );
@@ -156,15 +156,24 @@ function hasRecallHook(cwd: string): boolean {
 
 /** True when the generated objective script exists and its header names the current version. */
 function hasCurrentObjectiveScript(cwd: string): boolean {
+  let fd: number | null = null;
   try {
-    const head =
-      readFileSync(join(cwd, OBJECTIVE_HOOK_RELATIVE_PATH), "utf-8").split(
-        "\n",
-        1,
-      )[0] ?? "";
+    // Only the header line matters; read a bounded prefix instead of the whole file.
+    fd = openSync(join(cwd, OBJECTIVE_HOOK_RELATIVE_PATH), "r");
+    const buf = Buffer.alloc(256);
+    const n = readSync(fd, buf, 0, buf.length, 0);
+    const head = buf.toString("utf-8", 0, n).split("\n", 1)[0] ?? "";
     return head.includes(`objective hook v${OBJECTIVE_HOOK_VERSION}`);
   } catch {
     return false;
+  } finally {
+    if (fd !== null) {
+      try {
+        closeSync(fd);
+      } catch {
+        /* ignore */
+      }
+    }
   }
 }
 

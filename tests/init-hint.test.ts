@@ -13,6 +13,8 @@ import {
   markInitHintShown,
   checkInitHint,
   consumeInitHint,
+  checkHookHint,
+  consumeHookHint,
   INIT_HINT_TEXT,
   HINT_VERSION,
   computeHookHint,
@@ -192,6 +194,20 @@ describe("hook hint (0.13.2 — existing users without the objective hook)", () 
       cacheFile,
       JSON.stringify({ version: OBJECTIVE_HOOK_VERSION - 1, shownFor: [tmp] }),
     );
+    expect(computeHookHint(tmp, cacheFile)).toBe(HOOK_HINT_TEXT);
+  });
+
+  it("checkHookHint + consumeHookHint returns the hint exactly once and marks the cache", () => {
+    writeSettings(settingsWithRecall());
+    checkHookHint(tmp, cacheFile);
+    expect(consumeHookHint(cacheFile)).toBe(HOOK_HINT_TEXT);
+    expect(consumeHookHint(cacheFile)).toBe("");
+    expect(JSON.parse(readFileSync(cacheFile, "utf-8"))).toEqual({ version: OBJECTIVE_HOOK_VERSION, shownFor: [tmp] });
+    expect(computeHookHint(tmp, cacheFile)).toBeNull();
+  });
+
+  it("counts a version-pinned recall command as the recall hook", () => {
+    writeSettings(JSON.stringify({ hooks: { SessionStart: [{ matcher: "compact", hooks: [{ type: "command", command: "npx -y contextforge-mcp@0.13.1 recall" }] }] } }));
     expect(computeHookHint(tmp, cacheFile)).toBe(HOOK_HINT_TEXT);
   });
 
