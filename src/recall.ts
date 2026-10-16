@@ -2,7 +2,7 @@ import { existsSync, readFileSync, readdirSync, statSync, unlinkSync } from "fs"
 import { join, basename } from "path";
 import { spawnSync } from "child_process";
 import { ApiClient, readProjectLinkConfig } from "./api-client.js";
-import { sessionsDir } from "./objective-hook.js";
+import { sessionsDir, TAG_PREFIX_RE_SOURCE } from "./objective-hook.js";
 import { recordRecallEvent } from "./recall-stats.js";
 
 /** Exact hook command written by `init`. Keep in sync with README. */
@@ -522,10 +522,13 @@ export function findSessionFile(opts: {
   }
 }
 
+const TAG_PREFIX_RE = new RegExp(TAG_PREFIX_RE_SOURCE, "i");
+
 function isObjectiveCandidate(prompt: string): boolean {
   const flat = prompt.replace(/\s+/g, " ").trim();
   if (flat.length < OBJECTIVE_MIN_CHARS) return false;
   if (flat.startsWith("/")) return false;
+  if (TAG_PREFIX_RE.test(flat)) return false; // 0.13.2: Claude Code system turns logged by a v1 hook
   if (ACK_RE.test(flat)) return false;
   return true;
 }

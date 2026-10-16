@@ -41,7 +41,15 @@ export function sessionsDir(homeDir: string): string {
   return join(localStateDir(homeDir), "sessions");
 }
 
-export const OBJECTIVE_HOOK_VERSION = 1;
+export const OBJECTIVE_HOOK_VERSION = 2;
+
+/**
+ * Prompts that start with an XML-like tag are Claude Code system turns
+ * (`<task-notification>`, `<system-reminder>`, `<local-command-stdout>`),
+ * not something the user typed. Shared with recall.ts so entries logged by a
+ * v1 script are filtered at read time too. Used with the `i` flag.
+ */
+export const TAG_PREFIX_RE_SOURCE = "^<[a-z][a-z0-9_-]*[\\s>]";
 
 /**
  * The script body. Hard rules, because its stdout would be injected into the
@@ -57,6 +65,7 @@ export const OBJECTIVE_HOOK_SCRIPT = `// contextforge-mcp objective hook v${OBJE
 // context after a compaction (recall sends that objective, up to 600 chars,
 // to ContextForge as the search query; the log itself is never uploaded).
 // Prints nothing and always exits 0, so it can never block or slow a prompt.
+// Slash commands and system turns (prompts that start with an XML-like tag) are not logged.
 // To disable, remove the UserPromptSubmit hook group from .claude/settings.json.
 "use strict";
 var MAX_PROMPT_CHARS = 600;
@@ -71,6 +80,7 @@ function record(raw) {
     if (!sid) return;
     var prompt = j.prompt.replace(/\\s+/g, " ").trim();
     if (!prompt || prompt.charAt(0) === "/") return;
+    if (/${TAG_PREFIX_RE_SOURCE}/i.test(prompt)) return; // Claude Code system turn, not a user prompt
     var fs = require("fs");
     var path = require("path");
     var os = require("os");

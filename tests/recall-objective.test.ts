@@ -51,6 +51,15 @@ describe("selectObjective", () => {
     expect(res.objective).toBe("Refactor the auth middleware to use the new session table");
   });
 
+  it("0.13.2: ignores tag-prefixed system turns already present in a v1 log", () => {
+    const res = selectObjective([
+      e("Move the payment retry logic into the client", 1),
+      e("<task-notification> <task-id>x1</task-id> <status>completed</status> </task-notification>", 2),
+    ]);
+    expect(res.objective).toBe("Move the payment retry logic into the client");
+    expect(res.latest).toBeUndefined();
+  });
+
   it("truncates to 300 characters with an ellipsis", () => {
     const res = selectObjective([e("word ".repeat(200), 1)]);
     // 300 chars max before the ellipsis; trailing whitespace is trimmed first
