@@ -73,7 +73,12 @@ import { formatIngestResult } from "./format-ingest.js";
 import { buildRoutingHint } from "./space-routing.js";
 import { validateKey } from "./validate-key.js";
 import { runInitCLI, SERVER_INSTRUCTIONS } from "./init.js";
-import { checkInitHint, consumeInitHint } from "./init-hint.js";
+import {
+  checkInitHint,
+  consumeInitHint,
+  checkHookHint,
+  consumeHookHint,
+} from "./init-hint.js";
 import { SessionPresence } from "./session-presence.js";
 import { currentGit, buildGitContext, changedSince } from "./freshness.js";
 import { selectStale } from "./freshness-select.js";
@@ -2418,6 +2423,7 @@ async function main() {
 
   checkForUpdates(VERSION, colors).catch(() => {});
   checkInitHint(process.cwd());
+  checkHookHint(process.cwd());
 
   const server = new Server(
     {
@@ -5445,8 +5451,8 @@ https://github.com/alfredoizdev/contextforge-mcp
     }
   };
 
-  // Wrap handler to append one-time notices (update available, init hint)
-  // to successful text responses.
+  // Wrap handler to append one-time notices (update available, init hint,
+  // hook hint) to successful text responses.
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const result = await originalHandler(request);
     if (!result.isError && result.content?.length > 0) {
@@ -5456,6 +5462,8 @@ https://github.com/alfredoizdev/contextforge-mcp
         if (notice) last.text += notice;
         const hint = consumeInitHint();
         if (hint) last.text += hint;
+        const hookHint = consumeHookHint();
+        if (hookHint) last.text += hookHint;
       }
     }
     return result;

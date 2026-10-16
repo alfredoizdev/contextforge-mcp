@@ -1,8 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtempSync, rmSync, writeFileSync } from "fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
-import { runRecall, type RecallClient } from "../src/recall.js";
+import { runRecall, RECALL_RELEVANCE_TIMEOUT_MS, RECALL_STAGE_TIMEOUT_MS, type RecallClient } from "../src/recall.js";
+import { recallEventsFile } from "../src/recall-stats.js";
 
 function linkProject(cwd: string) {
   writeFileSync(
@@ -227,7 +228,7 @@ describe("runRecall 0.13.0 (objective + relevance)", () => {
     );
   });
 
-  it("a query that never resolves cannot erase the 0.12.0 block (own 4 s deadline, here 50 ms)", async () => {
+  it("a query that never resolves cannot erase the 0.12.0 block (own stage deadline, here 50 ms)", async () => {
     writeSession("sess-hang", ["Refactor the auth middleware to use the session table"]);
     const hanging: RecallClient = { ...fakeClient(), query: () => new Promise(() => {}) };
     const t0 = Date.now();
@@ -353,21 +354,90 @@ describe("readStdinBounded / parseHookInput", () => {
 });
 
 describe("runRecall records a local event", () => {
+  let cwd: string;
+  let home: string;
+  const env = { CONTEXTFORGE_API_KEY: "k" };
+  const writeSession = (sid: string, prompts: string[]) => {
+    mkdirSync(sessionsDir(home), { recursive: true });
+    writeFileSync(join(sessionsDir(home), `${sid}.jsonl`), prompts.map((p, i) => JSON.stringify({ t: 1000 + i, turn: i + 1, cwd, prompt: p })).join("\n") + "\n");
+  };
+  /** The last line of ~/.contextforge-mcp/recall-events.jsonl, parsed. */
+  const lastEvent = () => JSON.parse(readFileSync(recallEventsFile(home), "utf-8").trim().split("\n").pop()!);
+
+  beforeEach(() => {
+    cwd = mkdtempSync(join(tmpdir(), "cf-recall-ev-"));
+    home = mkdtempSync(join(tmpdir(), "cf-recall-ev-home-"));
+    linkProject(cwd);
+  });
+  afterEach(() => {
+    rmSync(cwd, { recursive: true, force: true });
+    rmSync(home, { recursive: true, force: true });
+  });
+
   it("writes one recall event with counts after a successful run", async () => {
-    const cwd = mkdtempSync(join(tmpdir(), "cf-recall-ev-"));
-    const home = mkdtempSync(join(tmpdir(), "cf-recall-ev-home-"));
-    try {
-      linkProject(cwd);
-      await runRecall({ cwd, env: { CONTEXTFORGE_API_KEY: "k" }, homeDir: home, sessionId: "none", makeClient: () => fakeClient(), collectGit: () => null });
-      const { recallEventsFile } = await import("../src/recall-stats.js");
-      const { readFileSync } = await import("fs");
-      const ev = JSON.parse(readFileSync(recallEventsFile(home), "utf-8").trim());
-      expect(ev).toMatchObject({ cwd, session_id: "none", objective: false, relevant: 0, recent: 2, tasks: 1 });
-      expect(typeof ev.latency_ms).toBe("number");
-    } finally {
-      rmSync(cwd, { recursive: true, force: true });
-      rmSync(home, { recursive: true, force: true });
-    }
+    await runRecall({ cwd, env, homeDir: home, sessionId: "none", makeClient: () => fakeClient(), collectGit: () => null });
+    const ev = JSON.parse(readFileSync(recallEventsFile(home), "utf-8").trim());
+    expect(ev).toMatchObject({ cwd, session_id: "none", objective: false, relevant: 0, recent: 2, tasks: 1 });
+    expect(typeof ev.latency_ms).toBe("number");
+  });
+
+  it("0.13.2: records relevant_outcome=hits with a duration when the query returns results", async () => {
+    writeSession("sess-hits", ["Move the payment retry logic into the client"]);
+    const client: RecallClient = {
+      ...fakeClient(),
+      query: async () => ({
+        results: [
+          { id: "r1", title: "Retry lives in the client", content: "Decided in May", score: 0.8 },
+          { id: "r2", title: "Backoff policy", content: "Exponential, max 5", score: 0.6 },
+        ],
+      }),
+    };
+    await runRecall({ cwd, env, homeDir: home, sessionId: "sess-hits", makeClient: () => client, collectGit: () => null });
+    const ev = lastEvent();
+    expect(ev.relevant_outcome).toBe("hits");
+    expect(ev.relevant).toBe(2);
+    expect(typeof ev.relevant_ms).toBe("number");
+  });
+
+  it("0.13.2: records relevant_outcome=empty when the query returns no results above the threshold", async () => {
+    writeSession("sess-empty", ["Move the payment retry logic into the client"]);
+    const client: RecallClient = { ...fakeClient(), query: async () => ({ results: [] }) };
+    await runRecall({ cwd, env, homeDir: home, sessionId: "sess-empty", makeClient: () => client, collectGit: () => null });
+    const ev = lastEvent();
+    expect(ev.relevant_outcome).toBe("empty");
+    expect(ev.relevant).toBe(0);
+    expect(typeof ev.relevant_ms).toBe("number");
+  });
+
+  it("0.13.2: records relevant_outcome=timeout when the query exceeds its deadline", async () => {
+    writeSession("sess-hang", ["Move the payment retry logic into the client"]);
+    const hanging: RecallClient = { ...fakeClient(), query: () => new Promise(() => {}) };
+    await runRecall({ cwd, env, homeDir: home, sessionId: "sess-hang", makeClient: () => hanging, collectGit: () => null, relevanceTimeoutMs: 50 });
+    const ev = lastEvent();
+    expect(ev.relevant_outcome).toBe("timeout");
+    expect(ev.relevant).toBe(0);
+    expect(typeof ev.relevant_ms).toBe("number");
+  });
+
+  it("0.13.2: records relevant_outcome=error when the query rejects", async () => {
+    writeSession("sess-err", ["Move the payment retry logic into the client"]);
+    const failing: RecallClient = { ...fakeClient(), query: async () => { throw new Error("boom"); } };
+    await runRecall({ cwd, env, homeDir: home, sessionId: "sess-err", makeClient: () => failing, collectGit: () => null });
+    const ev = lastEvent();
+    expect(ev.relevant_outcome).toBe("error");
+    expect(ev.relevant).toBe(0);
+  });
+
+  it("0.13.2: records relevant_outcome=skipped when no working context (no log, default branch)", async () => {
+    await runRecall({ cwd, env, homeDir: home, makeClient: () => fakeClient(), collectGit: () => null });
+    const ev = lastEvent();
+    expect(ev.relevant_outcome).toBe("skipped");
+    expect(ev.relevant_ms).toBeUndefined();
+  });
+
+  it("0.13.2: the relevance deadline equals the stage deadline (6 s), capped by stageTimeoutMs", () => {
+    expect(RECALL_RELEVANCE_TIMEOUT_MS).toBe(RECALL_STAGE_TIMEOUT_MS);
+    expect(RECALL_STAGE_TIMEOUT_MS).toBe(6000);
   });
 });
 

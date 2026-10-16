@@ -51,6 +51,37 @@ describe("selectObjective", () => {
     expect(res.objective).toBe("Refactor the auth middleware to use the new session table");
   });
 
+  it("0.13.2: ignores tag-prefixed system turns already present in a v1 log", () => {
+    const res = selectObjective([
+      e("Move the payment retry logic into the client", 1),
+      e("<task-notification> <task-id>x1</task-id> <status>completed</status> </task-notification>", 2),
+    ]);
+    expect(res.objective).toBe("Move the payment retry logic into the client");
+    expect(res.latest).toBeUndefined();
+  });
+
+  it("0.13.2: a system turn cut at the 600-char cap by a v1 script (no final closing tag) is still ignored", () => {
+    const cut = "<task-notification> <task-id>bc8xyom8c</task-id> <output-file>/tmp/x.output</output-file> <status>completed</status> <summary>Background command finished and the summary keeps going until the log cap trims it";
+    const res = selectObjective([e("Move the payment retry logic into the client", 1), e(cut, 2)]);
+    expect(res.latest).toBeUndefined();
+  });
+
+  it("0.13.2: a long tagged turn cut at the v1 cap with no closing tag at all is ignored", () => {
+    const cut = ('<agent-message from="a7e834a7ea79d88d2"> [Subagent hand-back] The text below is the final report of a subagent ' + "lorem ipsum ".repeat(60)).slice(0, 600);
+    expect(cut.length).toBe(600);
+    expect(cut.includes("</")).toBe(false);
+    const res = selectObjective([e("Move the payment retry logic into the client", 1), e(cut, 2)]);
+    expect(res.latest).toBeUndefined();
+    // but a long real prompt without markup is still a candidate
+    const long = ("Refactor the auth middleware to use the new session table " + "and keep the tests green ".repeat(40)).slice(0, 600);
+    expect(selectObjective([e(long, 1)]).objective).toBeDefined();
+  });
+
+  it("0.13.2: a prompt that merely starts with markup is still a candidate", () => {
+    const res = selectObjective([e("<div> is not centered on mobile, fix the flex layout", 1)]);
+    expect(res.objective).toBe("<div> is not centered on mobile, fix the flex layout");
+  });
+
   it("truncates to 300 characters with an ellipsis", () => {
     const res = selectObjective([e("word ".repeat(200), 1)]);
     // 300 chars max before the ellipsis; trailing whitespace is trimmed first

@@ -41,7 +41,7 @@ describe("objective hook script", () => {
   it("exports stable constants that match the README contract", () => {
     expect(OBJECTIVE_HOOK_RELATIVE_PATH).toBe(".claude/hooks/contextforge-objective.cjs");
     expect(OBJECTIVE_HOOK_COMMAND).toBe('node "$CLAUDE_PROJECT_DIR/.claude/hooks/contextforge-objective.cjs" 2>/dev/null || true');
-    expect(OBJECTIVE_HOOK_SCRIPT.startsWith("// contextforge-mcp objective hook v1")).toBe(true);
+    expect(OBJECTIVE_HOOK_SCRIPT.startsWith("// contextforge-mcp objective hook v2")).toBe(true);
     // NOT ~/.contextforge: that is the project-link FILE name (a project rooted at $HOME would collide)
     expect(sessionsDir("/h")).toBe(join("/h", ".contextforge-mcp", "sessions"));
   });
@@ -68,6 +68,39 @@ describe("objective hook script", () => {
       expect(r.status).toBe(0);
     }
     expect(existsSync(sessionFile("s1"))).toBe(false);
+  });
+
+  it("0.13.2: ignores Claude Code system turns that start with a tag (task notifications, reminders)", () => {
+    const sys = [
+      "<task-notification> <task-id>bc8xyom8c</task-id> <status>completed</status> </task-notification>",
+      "<system-reminder>\nsome injected text\n</system-reminder>",
+      "  <local-command-stdout>ok</local-command-stdout>",
+      '<agent-message from="a7e834a7ea79d88d2">\n[Subagent hand-back] The text below is the final report of a subagent.\n</agent-message>',
+    ];
+    for (const prompt of sys) {
+      const r = runHook(script, home, JSON.stringify({ session_id: "s-sys", prompt }));
+      expect(r.status).toBe(0);
+      expect(r.stdout).toBe("");
+    }
+    expect(existsSync(sessionFile("s-sys"))).toBe(false);
+  });
+
+  it("0.13.2: still logs prompts that start with a bare '<' or mention a tag later", () => {
+    const ok = [
+      "< 5 items left in the backlog, prioritize them",
+      "<-- see the error above and fix the parser",
+      "wrap the title in a <h1> tag",
+      // starts with markup but is not a whole tagged block → a real prompt, kept (review finding)
+      "<div> is not centered, fix it",
+      "<Button /> component renders twice on mount, find out why",
+      "<T extends X> generic helper should infer the return type",
+    ];
+    for (const prompt of ok) {
+      const r = runHook(script, home, JSON.stringify({ session_id: "s-ok", prompt }));
+      expect(r.status).toBe(0);
+    }
+    const lines = readFileSync(sessionFile("s-ok"), "utf-8").trim().split("\n");
+    expect(lines).toHaveLength(6);
   });
 
   it("exits 0 and writes nothing on invalid JSON, missing fields, or empty stdin", () => {
