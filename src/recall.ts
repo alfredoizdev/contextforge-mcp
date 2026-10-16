@@ -3,7 +3,7 @@ import { join, basename } from "path";
 import { spawnSync } from "child_process";
 import { ApiClient, readProjectLinkConfig } from "./api-client.js";
 import { sessionsDir, TAG_PREFIX_RE_SOURCE } from "./objective-hook.js";
-import { recordRecallEvent } from "./recall-stats.js";
+import { recordRecallEvent, type RelevantOutcome } from "./recall-stats.js";
 
 /** Exact hook command written by `init`. Keep in sync with README. */
 export const RECALL_COMMAND = "npx -y contextforge-mcp recall";
@@ -77,8 +77,6 @@ export const RECALL_MAX_RELEVANT = 5;
 /** Stricter than the API default (0.35) to keep the block short. */
 export const RECALL_RELEVANT_MIN_SCORE = 0.4;
 const RECALL_QUERY_LIMIT = 8;
-/** The semantic query gets its own deadline so a slow backend can never erase the rest of the block. */
-export const RECALL_RELEVANCE_TIMEOUT_MS = 4000;
 /**
  * 0.13.1 — every remote stage (spaces, each space's items, tasks) gets its
  * own deadline and degrades to "nothing from this stage". The block is then
@@ -87,6 +85,13 @@ export const RECALL_RELEVANCE_TIMEOUT_MS = 4000;
  * runs hit the old single 8 s deadline and printed nothing.
  */
 export const RECALL_STAGE_TIMEOUT_MS = 6000;
+/**
+ * 0.13.2: the semantic query gets the same deadline as every other stage
+ * (was 4 s, stricter than the 6 s stages added in 0.13.1 — it was the only
+ * stage that could time out while the others were still within budget).
+ * The effective deadline stays min(relevanceTimeoutMs, stageTimeoutMs).
+ */
+export const RECALL_RELEVANCE_TIMEOUT_MS = RECALL_STAGE_TIMEOUT_MS;
 /** Set CONTEXTFORGE_RECALL_RELEVANCE=0 to never run the semantic query. */
 export const RECALL_RELEVANCE_ENV = "CONTEXTFORGE_RECALL_RELEVANCE";
 const DEFAULT_BRANCH_RE = /^(main|master|HEAD|develop|dev|trunk)$/i;
@@ -296,26 +301,40 @@ export async function runRecall(opts: {
         .then((res) => res.issues ?? [])
         .catch(() => [] as RecallTask[]);
 
+      // 0.13.2: the local event records why this stage came back the way it
+      // did, so a timed-out query can be told apart from one with no hits.
+      let relevantOutcome: RelevantOutcome = "skipped";
+      let relevantMs: number | undefined;
       const relevantP: Promise<RelevantItem[]> =
         workingContext && typeof client.query === "function"
-          ? withTimeout(
-              client.query({
-                query: workingContext,
-                project_id: link.project_id,
-                limit: RECALL_QUERY_LIMIT,
-                min_score: RECALL_RELEVANT_MIN_SCORE,
-              }),
-              Math.min(opts.relevanceTimeoutMs ?? RECALL_RELEVANCE_TIMEOUT_MS, stageMs),
-            )
-              .then((res) =>
-                (res?.results ?? [])
-                  .filter((r) => r && typeof r.content === "string")
-                  .sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
-                  .slice(0, RECALL_MAX_RELEVANT)
-                  // An untitled memory uses its content as the title; don't print it twice.
-                  .map((r) => ({ id: r.id, title: r.title || oneLine(r.content), preview: r.title ? r.content : "" })),
+          ? (() => {
+              const t0 = Date.now();
+              return withTimeout(
+                client.query({
+                  query: workingContext,
+                  project_id: link.project_id,
+                  limit: RECALL_QUERY_LIMIT,
+                  min_score: RECALL_RELEVANT_MIN_SCORE,
+                }),
+                Math.min(opts.relevanceTimeoutMs ?? RECALL_RELEVANCE_TIMEOUT_MS, stageMs),
               )
-              .catch(() => [] as RelevantItem[])
+                .then((res) => {
+                  relevantMs = Date.now() - t0;
+                  const hits = (res?.results ?? [])
+                    .filter((r) => r && typeof r.content === "string")
+                    .sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
+                    .slice(0, RECALL_MAX_RELEVANT)
+                    // An untitled memory uses its content as the title; don't print it twice.
+                    .map((r) => ({ id: r.id, title: r.title || oneLine(r.content), preview: r.title ? r.content : "" }));
+                  relevantOutcome = hits.length > 0 ? "hits" : "empty";
+                  return hits;
+                })
+                .catch((err: unknown) => {
+                  relevantMs = Date.now() - t0;
+                  relevantOutcome = err instanceof Error && err.message === "recall timeout" ? "timeout" : "error";
+                  return [] as RelevantItem[];
+                });
+            })()
           : Promise.resolve([] as RelevantItem[]);
 
       const [perSpace, tasks, relevant] = await Promise.all([recentP, tasksP, relevantP]);
@@ -345,6 +364,8 @@ export async function runRecall(opts: {
         recent: scoped.length,
         tasks: tasks.slice(0, RECALL_MAX_TASKS).length,
         latency_ms: Date.now() - startedAt,
+        relevant_outcome: relevantOutcome,
+        ...(relevantMs !== undefined ? { relevant_ms: relevantMs } : {}),
       });
       return block;
     })();

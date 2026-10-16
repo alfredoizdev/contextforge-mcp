@@ -20,6 +20,9 @@ const MAX_EVENT_LINES = 5000;
 /** Only the tail of the events file is scanned when matching a follow-up. */
 const SCAN_TAIL_BYTES = 64 * 1024;
 
+/** Why the relevance stage produced what it did (0.13.2). Absent on events written before 0.13.2. */
+export type RelevantOutcome = "hits" | "empty" | "timeout" | "error" | "skipped";
+
 export interface RecallEvent {
   t: number;
   session_id?: string;
@@ -29,6 +32,10 @@ export interface RecallEvent {
   recent: number;
   tasks: number;
   latency_ms: number;
+  /** 0.13.2 */
+  relevant_outcome?: RelevantOutcome;
+  /** 0.13.2 — wall time of the relevance query, undefined when skipped. */
+  relevant_ms?: number;
 }
 
 interface Followup {
@@ -42,6 +49,8 @@ export interface RecallStats {
   recalls: number;
   withObjective: number;
   withRelevant: number;
+  /** 0.13.2 — recalls whose relevance query hit its deadline. */
+  relevanceTimedOut: number;
   followedUp: number;
   medianDelaySec: number | null;
 }
@@ -135,7 +144,7 @@ export function computeRecallStats(opts: { homeDir: string; now?: number; window
   const now = opts.now ?? Date.now();
   const windowDays = opts.windowDays ?? STATS_WINDOW_DAYS;
   const since = now - windowDays * 24 * 3600 * 1000;
-  const empty: RecallStats = { windowDays, recalls: 0, withObjective: 0, withRelevant: 0, followedUp: 0, medianDelaySec: null };
+  const empty: RecallStats = { windowDays, recalls: 0, withObjective: 0, withRelevant: 0, relevanceTimedOut: 0, followedUp: 0, medianDelaySec: null };
   try {
     const events = readJsonl<RecallEvent>(recallEventsFile(opts.homeDir)).filter(
       (e) => e && typeof e.t === "number" && e.t >= since && e.t <= now,
@@ -157,6 +166,7 @@ export function computeRecallStats(opts: { homeDir: string; now?: number; window
       recalls: events.length,
       withObjective: events.filter((e) => e.objective).length,
       withRelevant: events.filter((e) => (e.relevant ?? 0) > 0).length,
+      relevanceTimedOut: events.filter((e) => e.relevant_outcome === "timeout").length,
       followedUp: followups.length,
       medianDelaySec: median,
     };
@@ -175,6 +185,7 @@ export function formatRecallStats(s: RecallStats): string {
     `Recalls (last ${s.windowDays} days): ${s.recalls}`,
     `  with a session objective: ${s.withObjective} (${pct(s.withObjective, s.recalls)})`,
     `  with relevant memories: ${s.withRelevant} (${pct(s.withRelevant, s.recalls)})`,
+    `  relevance search timed out: ${s.relevanceTimedOut} (${pct(s.relevanceTimedOut, s.recalls)})`,
     `  followed by memory_query within 15 min: ${s.followedUp} (${pct(s.followedUp, s.recalls)})`,
     `  median time to first query: ${s.medianDelaySec === null ? "n/a" : `${s.medianDelaySec} s`}`,
   ];

@@ -69,6 +69,7 @@ describe("recall stats (local, best-effort)", () => {
       recalls: 3,
       withObjective: 2,
       withRelevant: 1,
+      relevanceTimedOut: 0,
       followedUp: 2,
       medianDelaySec: 60,
     });
@@ -78,6 +79,17 @@ describe("recall stats (local, best-effort)", () => {
     expect(text).toContain("with relevant memories: 1 (33%)");
     expect(text).toContain("followed by memory_query within 15 min: 2 (67%)");
     expect(text).toContain("median time to first query: 60 s");
+  });
+
+  it("0.13.2: counts relevance timeouts and ignores pre-0.13.2 events without an outcome", () => {
+    const now = 100 * 24 * 3600 * 1000;
+    ev(now - 3000, "/repo", { relevant_outcome: "timeout", relevant_ms: 6001 });
+    ev(now - 2000, "/repo", { relevant_outcome: "hits", relevant: 3, relevant_ms: 1200 });
+    ev(now - 1000, "/repo"); // old-style event, no outcome field
+    const s = computeRecallStats({ homeDir: home, now });
+    expect(s.recalls).toBe(3);
+    expect(s.relevanceTimedOut).toBe(1);
+    expect(formatRecallStats(s)).toContain("relevance search timed out: 1 (33%)");
   });
 
   it("formats the empty case without dividing by zero", () => {
