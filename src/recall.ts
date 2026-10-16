@@ -548,12 +548,20 @@ export function findSessionFile(opts: {
 }
 
 const TAG_PREFIX_RE = new RegExp(TAG_PREFIX_RE_SOURCE, "i");
+/** Opening tag only — used together with the v1 log cap (600 chars) below. */
+const TAG_OPEN_RE = /^<[a-z][a-z0-9_-]*[\s>]/i;
+/** MAX_PROMPT_CHARS of the v1/v2 hook script: an entry this long was cut, so its closing tag may be gone. */
+const HOOK_LOG_CAP_CHARS = 600;
 
 function isObjectiveCandidate(prompt: string): boolean {
   const flat = prompt.replace(/\s+/g, " ").trim();
   if (flat.length < OBJECTIVE_MIN_CHARS) return false;
   if (flat.startsWith("/")) return false;
   if (TAG_PREFIX_RE.test(flat)) return false; // 0.13.2: Claude Code system turns logged by a v1 hook
+  // A v1 script cut long system turns (<agent-message …>, long <task-notification>) at the
+  // log cap, dropping every closing tag. A real prompt of 600+ chars that opens with markup
+  // is vanishingly rare; a truncated tagged block at exactly the cap is the common case.
+  if (flat.length >= HOOK_LOG_CAP_CHARS && TAG_OPEN_RE.test(flat)) return false;
   if (ACK_RE.test(flat)) return false;
   return true;
 }

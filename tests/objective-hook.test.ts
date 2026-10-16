@@ -75,6 +75,7 @@ describe("objective hook script", () => {
       "<task-notification> <task-id>bc8xyom8c</task-id> <status>completed</status> </task-notification>",
       "<system-reminder>\nsome injected text\n</system-reminder>",
       "  <local-command-stdout>ok</local-command-stdout>",
+      '<agent-message from="a7e834a7ea79d88d2">\n[Subagent hand-back] The text below is the final report of a subagent.\n</agent-message>',
     ];
     for (const prompt of sys) {
       const r = runHook(script, home, JSON.stringify({ session_id: "s-sys", prompt }));
