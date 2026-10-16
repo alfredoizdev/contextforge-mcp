@@ -128,7 +128,7 @@ Files written:
 - `CLAUDE.md` for Claude Code (signals: existing `CLAUDE.md` or `.claude/` directory)
 - `.cursorrules` for Cursor (signals: existing `.cursorrules` or `.cursor/` directory)
 - `.claude/settings.json` for Claude Code — merged, never overwritten; only the two ContextForge hook groups are added
-- `.claude/hooks/contextforge-objective.cjs` for Claude Code — the generated objective hook script (safe to commit; refreshed by `init` when a new version ships)
+- `.claude/hooks/contextforge-objective.cjs` for Claude Code — the generated objective hook script (safe to commit; refreshed by `init` when a new version ships; prompts that start with an XML-like tag — Claude Code's own system turns — are not logged)
 
 If no editor is detected, both files are generated.
 
@@ -159,7 +159,7 @@ Long sessions get compacted: Claude Code summarizes the conversation to free spa
 1. **Objective hook** (`UserPromptSubmit`) — records each prompt locally so the session's first real request is never lost to the summary.
 2. **Recall hook** (`SessionStart`, matcher `compact`) — fires right after every compaction and prints back, in this order: the session objective and the latest request before the cut; up to 5 memories relevant to the current work (semantic search over the objective, git branch, recent commit subjects and changed files, whatever their age); the project's 10 most recent memories; up to 5 pending tasks; and a reminder to call `memory_query` for anything older. The whole block stays around 4 KB and is injected once, never pinned, so it does not move the compaction trigger.
 
-The relevance search is one metered query per compaction. It only runs when there is a session objective or you are on a non-default branch (git-only context on `main` is noise), it has its own 4-second deadline so a slow search can never drop the rest of the block, and `CONTEXTFORGE_RECALL_RELEVANCE=0` in the environment turns it off entirely.
+The relevance search is one metered query per compaction. It only runs when there is a session objective or you are on a non-default branch (git-only context on `main` is noise), it runs in parallel with the other fetches under the same 6-second stage deadline, so a slow search can never drop the rest of the block, and `CONTEXTFORGE_RECALL_RELEVANCE=0` in the environment turns it off entirely.
 
 The hooks run as plain shell commands, so `recall` reads your API key from `CONTEXTFORGE_API_KEY` if set, otherwise from the `contextforge` server entry in `~/.claude.json` (where `claude mcp add` stores it), otherwise from a project `.mcp.json`. It needs a linked project (`.contextforge` in the repo root). If anything is missing it prints nothing and never blocks the session. Note that a `CONTEXTFORGE_API_KEY` exported in your shell profile wins over `~/.claude.json`: if it holds an old key, recall silently prints nothing.
 
@@ -180,7 +180,7 @@ Nothing to reconfigure. Update to the latest and restart your AI client:
 npm update -g contextforge-mcp   # only if you installed globally; npx users get it on next launch
 ```
 
-You do **not** need to re-run `init` for the auto-load behavior. To get the post-compaction recall hook and the session objective hook, run `npx contextforge-mcp init` once in each project; it only adds what is missing.
+You do **not** need to re-run `init` for the auto-load behavior. To get the post-compaction recall hook and the session objective hook, run `npx contextforge-mcp init` once in each project; it only adds what is missing. Since 0.13.2 the server reminds you once per project when the recall hook is installed but the objective hook is missing or outdated.
 
 ---
 

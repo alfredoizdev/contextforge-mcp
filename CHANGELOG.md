@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.13.2
+
+- **The objective hook ignores Claude Code system turns.** Background-task notifications (`<task-notification>…`), `<system-reminder>` blocks and similar are delivered to the `UserPromptSubmit` hook like prompts; one showed up as "Latest request before compaction". Prompts that start with an XML-like tag are no longer logged, and `recall` ignores such entries in logs written by the previous script. The script is now v2; re-run `npx contextforge-mcp init` to replace it (it only touches what changed).
+- **The relevance search gets the same deadline as every other stage.** It kept a 4-second cap from 0.13.0, stricter than the 6-second per-stage deadlines added in 0.13.1, so on a slow backend it was the only stage that timed out while the rest of the block still arrived. It now shares the 6-second deadline. The local event (`~/.contextforge-mcp/recall-events.jsonl`) records why the stage came back the way it did — `relevant_outcome`: `hits`, `empty`, `timeout`, `error` or `skipped` — plus its duration, and `recall --stats` prints how many recalls timed out there.
+- **Existing projects are told once about the objective hook.** If `.claude/settings.json` runs the post-compaction recall hook but `.claude/hooks/contextforge-objective.cjs` is missing or older than the current version, the first tool response of a session carries a one-line tip to run `npx contextforge-mcp init`. Shown once per project per script version; `CONTEXTFORGE_DISABLE_INIT_HINT=1` disables it like the existing init tip.
+
 ## 0.13.1
 
 - **Recall never comes back empty because one request was slow.** Each remote stage of `recall` (listing the project's spaces, each space's recent items, pending tasks, the relevance search) now has its own 6-second deadline and degrades to "nothing from this stage"; the block is built from whatever arrived, and the session objective (local) is always printed. Before, a single slow call tripped the one global 8-second deadline and the hook printed nothing at all — measured on a 21-space project, 2 of 4 real post-compaction runs came back empty. The global deadline is now a 12-second last resort. Consequence for failures: if only the memories call fails, tasks still print (mirroring the existing "only tasks fail" behavior); if everything fails and there is no local session log, the output is still empty.
