@@ -48,8 +48,8 @@ describe("core size guard", () => {
     expect(CORE_TOOL_NAMES.length).toBeLessThanOrEqual(MAX_CORE_TOOLS);
   });
 
-  it("exposes 11 tools in lean mode", () => {
-    expect(CORE_TOOL_NAMES.length + 1).toBe(11);
+  it("exposes 15 tools in lean mode (14 core + gateway)", () => {
+    expect(CORE_TOOL_NAMES.length + 1).toBe(15);
   });
 });
 
@@ -62,14 +62,14 @@ describe("reachability", () => {
     expect(all.length).toBe(69);
   });
 
-  it("splits 10 core and 59 hidden", () => {
-    expect(core).toHaveLength(10);
-    expect(hidden).toHaveLength(59);
+  it("splits 14 core and 55 hidden", () => {
+    expect(core).toHaveLength(14);
+    expect(hidden).toHaveLength(55);
   });
 
   it("finds EVERY hidden tool by its own name — enumerated, not sampled", () => {
     const unreachable = hidden.filter(
-      (t) => !searchTools(hidden, t.name.replace(/_/g, " "), 5).some((m) => m.name === t.name),
+      (t) => !searchTools(all, t.name.replace(/_/g, " "), 5).some((m) => m.name === t.name),
     );
     expect(unreachable.map((t) => t.name)).toEqual([]);
   });
@@ -139,7 +139,7 @@ describe("reachability", () => {
   it("finds at least one tool for every category term", () => {
     const categories = [...new Set(hidden.map((t) => categoryOf(t.name)))];
     for (const c of categories) {
-      expect(searchTools(hidden, c, 5).length).toBeGreaterThan(0);
+      expect(searchTools(all, c, 5).length).toBeGreaterThan(0);
     }
   });
 
@@ -162,7 +162,7 @@ describe("reachability", () => {
     for (const t of hidden) {
       if (SYNONYMS[t.name]) {
         for (const syn of SYNONYMS[t.name]) {
-          const results = searchTools(hidden, syn, 5);
+          const results = searchTools(all, syn, 5);
           if (!results.some((m) => m.name === t.name)) {
             failedSynonyms.push(`${t.name}: crowded out by synonym "${syn}"`);
           }
@@ -172,9 +172,9 @@ describe("reachability", () => {
     expect(failedSynonyms).toEqual([]);
   });
 
-  it("verifies visibleTools exposes 11 in lean mode (10 core + gateway)", () => {
+  it("verifies visibleTools exposes 15 in lean mode (14 core + gateway)", () => {
     const visible = visibleTools(hidden.concat(core), {});
-    expect(visible).toHaveLength(11);
+    expect(visible).toHaveLength(15);
   });
 
   it("verifies visibleTools returns all 69 in full mode (no gateway)", () => {
@@ -189,15 +189,18 @@ describe("reachability", () => {
     expect(full.some((t) => t.name === "cf_tools")).toBe(false);
   });
 
-  it("no SYNONYMS key points at a core tool", () => {
-    const deadSynonyms = Object.keys(SYNONYMS).filter((k) => CORE_TOOL_NAMES.includes(k));
-    expect(deadSynonyms).toEqual([]);
+  it("every SYNONYMS key names a declared tool", () => {
+    // cf_tools searches every declared tool (core included) since 0.13.3, so a
+    // synonym for a core tool is live, not dead. A synonym for a name that no
+    // tool declares is the only dead entry.
+    const declared = new Set(all.map((t) => t.name));
+    const dead = Object.keys(SYNONYMS).filter((k) => !declared.has(k));
+    expect(dead).toEqual([]);
   });
 });
 
 describe("search relevance", () => {
   const all = declaredTools();
-  const { hidden } = splitTools(all);
 
   // Spanish queries from the probe, tuned and verified against production behavior
   const ES = [
@@ -232,7 +235,7 @@ describe("search relevance", () => {
   it("finds expected Spanish queries in top 5 results", () => {
     const misses: string[] = [];
     for (const [query, expected] of ES) {
-      const results = searchTools(hidden, query, 5).map((t) => t.name);
+      const results = searchTools(all, query, 5).map((t) => t.name);
       if (!results.includes(expected)) {
         misses.push(`"${query}" -> want ${expected}, got ${results.slice(0, 2).join(", ") || "NOTHING"}`);
       }
@@ -243,7 +246,7 @@ describe("search relevance", () => {
   it("finds expected English queries in top 5 results", () => {
     const misses: string[] = [];
     for (const [query, expected] of EN) {
-      const results = searchTools(hidden, query, 5).map((t) => t.name);
+      const results = searchTools(all, query, 5).map((t) => t.name);
       if (!results.includes(expected)) {
         misses.push(`"${query}" -> want ${expected}, got ${results.slice(0, 2).join(", ") || "NOTHING"}`);
       }

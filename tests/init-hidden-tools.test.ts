@@ -6,7 +6,11 @@ import { CORE_TOOL_NAMES, GATEWAY_TOOL_NAME } from "../src/tool-registry.js";
 
 const INIT_SRC = readFileSync(join(__dirname, "..", "src", "init.ts"), "utf8");
 
-const HIDDEN_IN_DOCS = [
+// The six tools the 0.11.0 templates stopped naming directly. Four of them are
+// core again since 0.13.3 (see LEGACY_TEMPLATE_TOOL_NAMES); the templates still
+// route them through cf_tools on purpose — that wording is client-agnostic and
+// must not drift back to bare names. Do not "fix" this list by removing them.
+const ROUTED_VIA_GATEWAY_IN_DOCS = [
   "memory_create_space",
   "memory_current_project",
   "memory_link_project",
@@ -26,8 +30,8 @@ describe("generated CLAUDE.md and server instructions", () => {
     expect(offenders).toEqual([]);
   });
 
-  it("names none of the six specific plumbing tools", () => {
-    for (const t of HIDDEN_IN_DOCS) expect(INIT_SRC).not.toContain(t);
+  it("names none of the six plumbing tools the templates route through cf_tools", () => {
+    for (const t of ROUTED_VIA_GATEWAY_IN_DOCS) expect(INIT_SRC).not.toContain(t);
   });
 
   it("still instructs proactive recall and save", () => {
@@ -52,7 +56,7 @@ describe("generated CLAUDE.md and server instructions", () => {
  * see) also lived in runtime hint strings and agent-facing message templates
  * inside src/index.ts's tool-call dispatch — not just in the generated
  * CLAUDE.md text above. This sweep guards against that whole class of bug
- * coming back for ANY of the 59 hidden tools, not just the original six.
+ * coming back for ANY of the 55 hidden tools, not just the original six.
  *
  * src/index.ts calls main() at import time, so — same rule as the rest of
  * this file — it is read as text, never imported.
@@ -72,9 +76,9 @@ describe("src/index.ts runtime hints never name a hidden tool as a bare instruct
     (n) => !CORE_TOOL_NAMES.includes(n) && n !== GATEWAY_TOOL_NAME,
   );
 
-  it("sanity: sees all 69 tool names and the expected 59 are hidden", () => {
+  it("sanity: sees all 69 tool names and the expected 55 are hidden", () => {
     expect(ALL_TOOL_NAMES.length).toBe(69);
-    expect(HIDDEN_TOOL_NAMES.length).toBe(59);
+    expect(HIDDEN_TOOL_NAMES.length).toBe(55);
   });
 
   /**

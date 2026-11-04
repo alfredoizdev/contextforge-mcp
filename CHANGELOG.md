@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.13.3
+
+- **`CLAUDE.md` / `.cursorrules` generated before 0.11.0 work again, with nothing to re-run.** Those files tell the agent to call `mcp__contextforge__session_update`, `memory_current_project`, `memory_link_project` and `memory_list_items` directly. 0.11.0 hid the four behind `cf_tools`, and `init` never rewrites a section whose marker is already present, so every project initialised earlier has shown "No such tool available: mcp__contextforge__session_update" on each session that followed its own presence rules. The client rejects such a call before the server sees it, so the four tools are listed again: the lean surface is now 15 tools (14 core + `cf_tools`), still under the 15-core ceiling, with 55 tools behind the gateway. No user action: `npx` picks up the new version on the next session.
+- **`cf_tools` reaches every tool, core included.** Files generated since 0.11.0 say `cf_tools` (query "update session"); with `session_update` back in core, a gateway that searched only hidden tools would have returned nothing for that instruction. Search and `name:` execution now cover all 69 tools (the gateway still refuses to invoke itself).
+
 ## 0.13.2
 
 - **The objective hook ignores Claude Code system turns.** Background-task notifications (`<task-notification>…`), `<system-reminder>` blocks and similar are delivered to the `UserPromptSubmit` hook like prompts; one showed up as "Latest request before compaction". Prompts that are a tagged block (start with an XML-like opening tag and contain a closing tag) are no longer logged, and `recall` ignores such entries in logs written by the previous script; a prompt that merely begins with markup ("<div> is not centered, fix it") is still logged. The script is now v2; re-run `npx contextforge-mcp init` to replace it (it only touches what changed).
