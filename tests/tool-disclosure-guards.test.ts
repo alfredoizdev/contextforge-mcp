@@ -69,7 +69,7 @@ describe("reachability", () => {
 
   it("finds EVERY hidden tool by its own name — enumerated, not sampled", () => {
     const unreachable = hidden.filter(
-      (t) => !searchTools(hidden, t.name.replace(/_/g, " "), 5).some((m) => m.name === t.name),
+      (t) => !searchTools(all, t.name.replace(/_/g, " "), 5).some((m) => m.name === t.name),
     );
     expect(unreachable.map((t) => t.name)).toEqual([]);
   });
@@ -139,7 +139,7 @@ describe("reachability", () => {
   it("finds at least one tool for every category term", () => {
     const categories = [...new Set(hidden.map((t) => categoryOf(t.name)))];
     for (const c of categories) {
-      expect(searchTools(hidden, c, 5).length).toBeGreaterThan(0);
+      expect(searchTools(all, c, 5).length).toBeGreaterThan(0);
     }
   });
 
@@ -162,7 +162,7 @@ describe("reachability", () => {
     for (const t of hidden) {
       if (SYNONYMS[t.name]) {
         for (const syn of SYNONYMS[t.name]) {
-          const results = searchTools(hidden, syn, 5);
+          const results = searchTools(all, syn, 5);
           if (!results.some((m) => m.name === t.name)) {
             failedSynonyms.push(`${t.name}: crowded out by synonym "${syn}"`);
           }
@@ -201,7 +201,6 @@ describe("reachability", () => {
 
 describe("search relevance", () => {
   const all = declaredTools();
-  const { hidden } = splitTools(all);
 
   // Spanish queries from the probe, tuned and verified against production behavior
   const ES = [
@@ -236,7 +235,7 @@ describe("search relevance", () => {
   it("finds expected Spanish queries in top 5 results", () => {
     const misses: string[] = [];
     for (const [query, expected] of ES) {
-      const results = searchTools(hidden, query, 5).map((t) => t.name);
+      const results = searchTools(all, query, 5).map((t) => t.name);
       if (!results.includes(expected)) {
         misses.push(`"${query}" -> want ${expected}, got ${results.slice(0, 2).join(", ") || "NOTHING"}`);
       }
@@ -247,7 +246,7 @@ describe("search relevance", () => {
   it("finds expected English queries in top 5 results", () => {
     const misses: string[] = [];
     for (const [query, expected] of EN) {
-      const results = searchTools(hidden, query, 5).map((t) => t.name);
+      const results = searchTools(all, query, 5).map((t) => t.name);
       if (!results.includes(expected)) {
         misses.push(`"${query}" -> want ${expected}, got ${results.slice(0, 2).join(", ") || "NOTHING"}`);
       }

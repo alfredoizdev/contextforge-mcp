@@ -93,3 +93,30 @@ describe("cf_tools keeps resolving the legacy tools for post-0.11.0 templates", 
     expect(INDEX_SRC).toContain("cf_tools cannot invoke itself");
   });
 });
+
+describe("searching every tool does not let synonym-less core tools crowd out hidden ones", () => {
+  // Core tools have no SYNONYMS entry. Before 0.13.3 they were never in the
+  // gateway's candidate set, which hid a scoring bug: an empty synonym list
+  // tokenised to [""], and `term.includes("")` is always true, so every
+  // synonym-less tool earned the fuzzy-synonym +6 for any 4+ char term.
+  const t = (name: string): ToolDef => ({ name, description: "", inputSchema: {} });
+
+  it("gives a tool with no synonyms score 0 for a term matching nothing else", () => {
+    expect(searchTools([t("tasks_list")], "mover")).toEqual([]);
+    expect(searchTools([t("memory_help")], "importar")).toEqual([]);
+  });
+
+  it("ranks the intended hidden tool first for Spanish synonym queries against all 69 tools", () => {
+    const all = declaredTools();
+    const cases: Array<[string, string]> = [
+      ["mover", "memory_move_item"],
+      ["importar", "memory_import"],
+      ["listar snapshots", "memory_snapshot_list"],
+      ["exportar", "memory_export"],
+      ["list repos", "memory_git_list"],
+    ];
+    for (const [query, expected] of cases) {
+      expect(searchTools(all, query, 5)[0]?.name, query).toBe(expected);
+    }
+  });
+});

@@ -6,7 +6,11 @@ import { CORE_TOOL_NAMES, GATEWAY_TOOL_NAME } from "../src/tool-registry.js";
 
 const INIT_SRC = readFileSync(join(__dirname, "..", "src", "init.ts"), "utf8");
 
-const HIDDEN_IN_DOCS = [
+// The six tools the 0.11.0 templates stopped naming directly. Four of them are
+// core again since 0.13.3 (see LEGACY_TEMPLATE_TOOL_NAMES); the templates still
+// route them through cf_tools on purpose — that wording is client-agnostic and
+// must not drift back to bare names. Do not "fix" this list by removing them.
+const ROUTED_VIA_GATEWAY_IN_DOCS = [
   "memory_create_space",
   "memory_current_project",
   "memory_link_project",
@@ -26,8 +30,8 @@ describe("generated CLAUDE.md and server instructions", () => {
     expect(offenders).toEqual([]);
   });
 
-  it("names none of the six specific plumbing tools", () => {
-    for (const t of HIDDEN_IN_DOCS) expect(INIT_SRC).not.toContain(t);
+  it("names none of the six plumbing tools the templates route through cf_tools", () => {
+    for (const t of ROUTED_VIA_GATEWAY_IN_DOCS) expect(INIT_SRC).not.toContain(t);
   });
 
   it("still instructs proactive recall and save", () => {

@@ -186,7 +186,7 @@ You do **not** need to re-run `init` for the auto-load behavior. To get the post
 
 ## Available Tools
 
-ContextForge defines 69 tools across **Knowledge Management**, **GitHub Integration**, **Issue Tracking**, and **Collaboration**. No capability was ever removed — every tool below is fully callable — but as of v0.11.0, your AI client sees only **15 of them by default** (`CONTEXTFORGE_TOOLS=lean`, the default):
+ContextForge defines 69 tools across **Knowledge Management**, **GitHub Integration**, **Issue Tracking**, and **Collaboration**. No capability was ever removed — every tool below is fully callable — but since v0.11.0 your AI client sees only a small subset by default — **15 since v0.13.3** (11 in 0.11.0–0.13.2) (`CONTEXTFORGE_TOOLS=lean`, the default):
 
 - **14 core tools** — the ten used on the agent's own initiative every session: `memory_query`, `memory_ingest`, `memory_check_freshness`, `memory_confirm`, `memory_correct`, `memory_forget`, `tasks_list`, `tasks_what_next`, `session_list`, `memory_help` — plus the four that `CLAUDE.md` / `.cursorrules` files generated before 0.11.0 call by name, kept visible so those files keep working without re-running `init`: `session_update`, `memory_current_project`, `memory_link_project`, `memory_list_items`.
 - **`cf_tools`** — one gateway tool that discovers and runs the other 55 (and can reach the core ones too). Ask your AI naturally ("sync my git commits", "restore from a snapshot", "olvida ese recuerdo viejo") and it searches (English or Spanish) and calls the right tool for you — no need to know an exact name.

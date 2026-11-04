@@ -253,7 +253,8 @@ describe("searchTools", () => {
       { query: "del", maxMatches: 3 }, // 3-char: should match only via segment if at all
     ];
     for (const { query, maxMatches } of noiseQueries) {
-      const results = searchTools(hidden, query, 55);
+      // cf_tools searches every tool since 0.13.3, so the noise guard runs on all 69.
+      const results = searchTools(allTools, query, 69);
       expect(results.length).toBeLessThanOrEqual(
         maxMatches,
         `"${query}" matched ${results.length} tools (max ${maxMatches}): ${results.map((t) => t.name).join(", ")}`
