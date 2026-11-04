@@ -18,7 +18,7 @@ const tool = (name: string): ToolDef => ({
 });
 
 /**
- * Extract the real TOOLS array from src/index.ts (59 tools, 10 core + 59 hidden).
+ * Extract the real TOOLS array from src/index.ts (69 tools, 14 core + 55 hidden).
  * Replicates the approach used by search-probe.cjs to ensure test and probe
  * use the same tool set and catch regressions at the 59-tool scale.
  *
@@ -53,7 +53,7 @@ function extractRealTools(): ToolDef[] {
 }
 
 describe("CORE_TOOL_NAMES", () => {
-  it("is exactly the 10 agreed core tools", () => {
+  it("is exactly the 10 agreed core tools plus the 4 named by pre-0.11.0 generated files", () => {
     expect([...CORE_TOOL_NAMES].sort()).toEqual(
       [
         "memory_check_freshness",
@@ -66,6 +66,11 @@ describe("CORE_TOOL_NAMES", () => {
         "session_list",
         "tasks_list",
         "tasks_what_next",
+        // Legacy: see LEGACY_TEMPLATE_TOOL_NAMES / tests/legacy-template-tools.test.ts
+        "memory_current_project",
+        "memory_link_project",
+        "memory_list_items",
+        "session_update",
       ].sort(),
     );
   });
@@ -223,10 +228,10 @@ describe("searchTools", () => {
     expect(names).toEqual(names2);
   });
 
-  it("rejects short 3-char noise terms to prevent accidental matches (against real 59 tools)", () => {
+  it("rejects short 3-char noise terms to prevent accidental matches (against real 55 tools)", () => {
     // This test locks in the noise reduction fix from round 2.
     // Short 3-char terms should NOT match dozens of tools via substring.
-    // CRITICAL: This test runs against the REAL 59 hidden tools (extracted from src/index.ts),
+    // CRITICAL: This test runs against the REAL 55 hidden tools (extracted from src/index.ts),
     // not the 7-tool HIDDEN fixture. The bug was measured at 59-tool scale and the test must
     // catch it there, not pass silently with fewer collisions.
     // The fix guards substring matching with term.length >= 4.
@@ -239,7 +244,7 @@ describe("searchTools", () => {
     // - "del" (3): 12 matches
     const allTools = extractRealTools();
     const { hidden } = splitTools(allTools);
-    expect(hidden.length).toBe(59); // Verify we have the real set
+    expect(hidden.length).toBe(55); // Verify we have the real set
 
     const noiseQueries = [
       { query: "tar", maxMatches: 2 }, // 3-char: should match only via segment if at all
@@ -248,7 +253,7 @@ describe("searchTools", () => {
       { query: "del", maxMatches: 3 }, // 3-char: should match only via segment if at all
     ];
     for (const { query, maxMatches } of noiseQueries) {
-      const results = searchTools(hidden, query, 59);
+      const results = searchTools(hidden, query, 55);
       expect(results.length).toBeLessThanOrEqual(
         maxMatches,
         `"${query}" matched ${results.length} tools (max ${maxMatches}): ${results.map((t) => t.name).join(", ")}`

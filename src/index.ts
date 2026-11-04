@@ -88,7 +88,6 @@ import {
 } from "./resolve-space.js";
 import {
   GATEWAY_TOOL_NAME,
-  splitTools,
   searchTools,
   visibleTools,
 } from "./tool-registry.js";
@@ -2461,11 +2460,16 @@ async function main() {
       switch (name) {
         case "cf_tools": {
           const input = CfToolsInputSchema.parse(args);
-          const { hidden } = splitTools(TOOLS);
+          // The gateway reaches EVERY tool, core included. Generated CLAUDE.md
+          // files say e.g. `cf_tools` (query "update session"), and the tool
+          // behind that instruction may be core (session_update is, again,
+          // since 0.13.3) — searching only the hidden set would make such an
+          // instruction return nothing.
+          const reachable = TOOLS;
 
           // Discovery: return full schemas so the agent can call on the next turn.
           if (input.query) {
-            const matches = searchTools(hidden, input.query, 5);
+            const matches = searchTools(reachable, input.query, 5);
             return {
               content: [
                 {
@@ -2501,8 +2505,8 @@ async function main() {
               isError: true,
             };
           }
-          if (!hidden.some((t) => t.name === input.name)) {
-            const suggestions = searchTools(hidden, input.name ?? "", 3).map((t) => t.name);
+          if (!reachable.some((t) => t.name === input.name)) {
+            const suggestions = searchTools(reachable, input.name ?? "", 3).map((t) => t.name);
             return {
               content: [
                 {

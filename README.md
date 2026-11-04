@@ -186,10 +186,10 @@ You do **not** need to re-run `init` for the auto-load behavior. To get the post
 
 ## Available Tools
 
-ContextForge defines 69 tools across **Knowledge Management**, **GitHub Integration**, **Issue Tracking**, and **Collaboration**. No capability was ever removed — every tool below is fully callable — but as of v0.11.0, your AI client sees only **11 of them by default** (`CONTEXTFORGE_TOOLS=lean`, the default):
+ContextForge defines 69 tools across **Knowledge Management**, **GitHub Integration**, **Issue Tracking**, and **Collaboration**. No capability was ever removed — every tool below is fully callable — but as of v0.11.0, your AI client sees only **15 of them by default** (`CONTEXTFORGE_TOOLS=lean`, the default):
 
-- **10 core tools** — the ones used on the agent's own initiative every session: `memory_query`, `memory_ingest`, `memory_check_freshness`, `memory_confirm`, `memory_correct`, `memory_forget`, `tasks_list`, `tasks_what_next`, `session_list`, `memory_help`.
-- **`cf_tools`** — one gateway tool that discovers and runs the other 59. Ask your AI naturally ("sync my git commits", "restore from a snapshot", "olvida ese recuerdo viejo") and it searches (English or Spanish) and calls the right tool for you — no need to know an exact name.
+- **14 core tools** — the ten used on the agent's own initiative every session: `memory_query`, `memory_ingest`, `memory_check_freshness`, `memory_confirm`, `memory_correct`, `memory_forget`, `tasks_list`, `tasks_what_next`, `session_list`, `memory_help` — plus the four that `CLAUDE.md` / `.cursorrules` files generated before 0.11.0 call by name, kept visible so those files keep working without re-running `init`: `session_update`, `memory_current_project`, `memory_link_project`, `memory_list_items`.
+- **`cf_tools`** — one gateway tool that discovers and runs the other 55 (and can reach the core ones too). Ask your AI naturally ("sync my git commits", "restore from a snapshot", "olvida ese recuerdo viejo") and it searches (English or Spanish) and calls the right tool for you — no need to know an exact name.
 
 Set `CONTEXTFORGE_TOOLS=full` to expose all 69 tools directly to your client instead, matching the behavior of versions before 0.11.0. See [Environment Variables](#environment-variables).
 
@@ -331,7 +331,7 @@ You don't need to memorize commands — just talk naturally to your AI:
 | `CONTEXTFORGE_API_KEY` | Yes | Your API key from the dashboard |
 | `CONTEXTFORGE_API_URL` | No | API endpoint (defaults to production) |
 | `CONTEXTFORGE_DEFAULT_SPACE` | No | Default space for operations |
-| `CONTEXTFORGE_TOOLS` | No | `lean` (default) exposes 11 tools — the 10 most-used plus the `cf_tools` gateway to the other 59. `full` exposes all 69, as versions before 0.11.0 did. Lean keeps ContextForge under Cursor's 40-tool cap and Claude Code's 50-tool degradation threshold. |
+| `CONTEXTFORGE_TOOLS` | No | `lean` (default) exposes 15 tools — the 14 core ones plus the `cf_tools` gateway to the other 55. `full` exposes all 69, as versions before 0.11.0 did. Lean keeps ContextForge under Cursor's 40-tool cap and Claude Code's 50-tool degradation threshold. |
 
 ---
 
