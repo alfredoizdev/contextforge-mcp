@@ -145,6 +145,26 @@ describe('ApiClient', () => {
   });
 
   describe('ingest', () => {
+    const okIngest = () =>
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        json: async () => ({ created: 1, duplicates_skipped: 0, items: [{ id: 'n', status: 'created' }], tokens_used: 0 }),
+      });
+    const sentItem = () => JSON.parse(mockFetch.mock.calls[0][1].body).items[0];
+
+    it('sends replaces on the item when given', async () => {
+      okIngest();
+      await client.ingest({ content: 'new', source_type: 'manual', tags: [], related_paths: [], replaces: 'old-id' });
+      expect(sentItem().replaces).toBe('old-id');
+    });
+
+    it('omits replaces entirely when not given (older servers see the same payload)', async () => {
+      okIngest();
+      await client.ingest({ content: 'new', source_type: 'manual', tags: [], related_paths: [] });
+      expect('replaces' in sentItem()).toBe(false);
+    });
+
     it('should send ingest request', async () => {
       const mockResponse = {
         created: 1,

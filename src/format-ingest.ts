@@ -1,5 +1,18 @@
 import type { IngestResponse } from './types.js';
 
+type IngestItem = IngestResponse['items'][number];
+
+/** "\n🔗 Replaces …" / "\n⚠️ Saved, but not linked …" when `replaces` was
+ * passed; "" otherwise (older servers / no replaces → message unchanged). */
+function replacesLine(item: IngestItem | undefined): string {
+  const link = item?.replaces_link;
+  if (!link || !link.target_id) return '';
+  if (link.status === 'linked') {
+    return `\n🔗 Replaces ${link.target_id} (marked as superseded)`;
+  }
+  return `\n⚠️ Saved, but not linked to ${link.target_id}: ${link.reason ?? 'unknown reason'}`;
+}
+
 /** Turns an ingest response into an accurate, human-readable message.
  * Distinguishes created / duplicate / error so a failed save is never
  * mislabeled as a duplicate (the silent-data-loss bug), and warns when an
@@ -19,7 +32,7 @@ export function formatIngestResult(
   }
   if (item?.status === 'duplicate') {
     return {
-      message: `⏭️ Identical content already in memory (id ${item.id}). Nothing new saved. Pass deduplicate:false to save a copy anyway.`,
+      message: `⏭️ Identical content already in memory (id ${item.id}). Nothing new saved. Pass deduplicate:false to save a copy anyway.${replacesLine(item)}`,
       hint,
     };
   }
@@ -37,7 +50,7 @@ export function formatIngestResult(
     ? `Filed under your default space${space.name ? ` (${space.name})` : ''}. To route a memory to a specific space, pass space:"<space name>" on save, or move it with memory_move_item.`
     : hint;
   return {
-    message: savedMessage,
+    message: savedMessage + replacesLine(item),
     hint: savedHint,
     details: { id: item?.id, title, space_id: space?.id },
   };

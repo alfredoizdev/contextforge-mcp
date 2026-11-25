@@ -57,3 +57,34 @@ describe('formatIngestResult', () => {
     expect(out.hint).toContain('space:');
   });
 });
+
+describe('formatIngestResult — replaces link', () => {
+  it('linked → says it replaces the old memory', () => {
+    const out = formatIngestResult(
+      res({ id: 'k1', status: 'created', embedded: true, replaces_link: { target_id: 'o1', status: 'linked' } }, 1),
+      'Note',
+    );
+    expect(out.message).toContain('Saved');
+    expect(out.message).toContain('🔗 Replaces o1 (marked as superseded)');
+  });
+  it('skipped with reason → saved, but says why not linked', () => {
+    const out = formatIngestResult(
+      res(
+        {
+          id: 'k1',
+          status: 'created',
+          embedded: true,
+          replaces_link: { target_id: 'o1', status: 'skipped', reason: 'not_found_or_forbidden' },
+        },
+        1,
+      ),
+      'Note',
+    );
+    expect(out.message).toContain('Saved');
+    expect(out.message).toContain('⚠️ Saved, but not linked to o1: not_found_or_forbidden');
+  });
+  it('no replaces_link → message unchanged', () => {
+    const out = formatIngestResult(res({ id: 'k1', status: 'created', embedded: true }, 1), 'Note');
+    expect(out.message).toBe('📥 Saved "Note" to memory');
+  });
+});
