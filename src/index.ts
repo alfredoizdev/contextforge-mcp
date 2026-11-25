@@ -2592,7 +2592,7 @@ async function main() {
             routingHint = buildRoutingHint(names);
           }
           const ingestText = formatResponse(
-            formatIngestResult(result, itemTitle),
+            formatIngestResult(result, itemTitle, input.replaces),
           );
           return {
             content: [

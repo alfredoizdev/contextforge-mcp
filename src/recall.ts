@@ -202,7 +202,16 @@ export interface RecallClient {
     project_id?: string;
     limit?: number;
     min_score?: number;
-  }): Promise<{ results?: Array<{ id: string; title?: string; content: string; score: number }> }>;
+  }): Promise<{
+    results?: Array<{
+      id: string;
+      title?: string;
+      content: string;
+      score: number;
+      /** Set by servers that know this memory was replaced; recall skips these. */
+      superseded_by?: { id: string; title?: string | null; created_at?: string } | null;
+    }>;
+  }>;
 }
 
 function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
@@ -325,7 +334,8 @@ export async function runRecall(opts: {
                 .then((res) => {
                   relevantMs = Date.now() - t0;
                   const hits = (res?.results ?? [])
-                    .filter((r) => r && typeof r.content === "string")
+                    // A superseded memory is no longer current; never inject it.
+                    .filter((r) => r && typeof r.content === "string" && !r.superseded_by)
                     .sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
                     .slice(0, RECALL_MAX_RELEVANT)
                     // An untitled memory uses its content as the title; don't print it twice.

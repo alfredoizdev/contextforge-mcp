@@ -259,6 +259,23 @@ describe("runRecall 0.13.0 (objective + relevance)", () => {
     expect(out).toContain("Session objective");
   });
 
+  it("skips relevant hits that are superseded and only injects live ones", async () => {
+    writeSession("sess-sup", ["Figure out where user sessions are stored now"]);
+    const client: RecallClient = {
+      ...fakeClient(),
+      query: async () => ({
+        results: [
+          { id: "old", title: "Sessions live in Redis", content: "old decision", score: 0.95, superseded_by: { id: "new", title: "Sessions moved to Postgres", created_at: "2026-11-20T00:00:00Z" } },
+          { id: "new", title: "Sessions moved to Postgres", content: "current decision", score: 0.9 },
+        ],
+      }),
+    };
+    const out = await runRecall({ cwd, env, homeDir: home, sessionId: "sess-sup", makeClient: () => client, collectGit: () => null });
+    expect(out).toContain("Relevant to current work:\n- Sessions moved to Postgres — current decision");
+    expect(out).not.toContain("Sessions live in Redis");
+    expect(out).not.toContain("old decision");
+  });
+
   it("does not print an untitled relevant memory twice", async () => {
     writeSession("sess-untitled", ["Investigate the nightly import job slowness"]);
     const client: RecallClient = { ...fakeClient(), query: async () => ({ results: [{ id: "u", content: "untitled content here", score: 0.9 }] }) };

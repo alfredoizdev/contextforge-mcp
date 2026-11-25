@@ -89,10 +89,21 @@ describe('formatIngestResult — replaces link', () => {
       'Note',
     );
     expect(out.message).toContain('already in memory');
-    expect(out.message).toContain('⚠️ Saved, but not linked to o1: duplicate');
+    expect(out.message).toContain('⚠️ Not linked to o1: duplicate');
+    expect(out.message).not.toContain('Saved, but');
   });
   it('no replaces_link → message unchanged', () => {
     const out = formatIngestResult(res({ id: 'k1', status: 'created', embedded: true }, 1), 'Note');
+    expect(out.message).toBe('📥 Saved "Note" to memory');
+  });
+  it('replaces requested but old server returns no replaces_link → not confirmed', () => {
+    const out = formatIngestResult(res({ id: 'k1', status: 'created', embedded: true }, 1), 'Note', 'o1');
+    expect(out.message).toBe(
+      '📥 Saved "Note" to memory\n⚠️ Link to o1 not confirmed by the server (update may be pending).',
+    );
+  });
+  it('replaces not requested → no confirmation warning', () => {
+    const out = formatIngestResult(res({ id: 'k1', status: 'created', embedded: true }, 1), 'Note', undefined);
     expect(out.message).toBe('📥 Saved "Note" to memory');
   });
 });
