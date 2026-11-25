@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.14.0
+
+- **Search results say when a memory is from, and whether a newer one replaced it.** With a server from 2026-11-25 on, each `memory_query` result carries a line like `📅 2026-11-24 · 📁 src/auth.ts` (last edit, falling back to creation date, plus `confirmed YYYY-MM-DD` when the memory was confirmed with `memory_confirm`). A memory that another one replaced is ranked after the live ones and shows `⚠️ Replaced by "<title>" (<date>, 🆔 <id>). Prefer that one.` It is never hidden or deleted, so the reason for the change stays findable. With an older server, output is byte-identical to 0.13.3 (pinned by tests).
+- **`memory_ingest` and `memory_ingest_batch` accept `replaces`.** When a decision changes, save the new one with `replaces: <id of the old memory>`; the server links them and marks the old one in every later search. A wrong or inaccessible id never blocks the save: the response says the memory was saved but not linked, and why. Use `memory_correct` for fixing wording, `replaces` when the decision itself changed.
+- **Recall no longer re-injects replaced memories** after a compaction. They are still returned (marked) by `memory_query`.
+
 ## 0.13.3
 
 - **`CLAUDE.md` / `.cursorrules` generated before 0.11.0 work again, with nothing to re-run.** Those files tell the agent to call `mcp__contextforge__session_update`, `memory_current_project`, `memory_link_project` and `memory_list_items` directly. 0.11.0 hid the four behind `cf_tools`, and `init` never rewrites a section whose marker is already present, so every project initialised earlier has shown "No such tool available: mcp__contextforge__session_update" on each session that followed its own presence rules. The client rejects such a call before the server sees it, so the four tools are listed again: the lean surface is now 15 tools (14 core + `cf_tools`), still under the 15-core ceiling, with 55 tools behind the gateway. No user action: `npx` picks up the new version on the next session.
