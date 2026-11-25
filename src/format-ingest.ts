@@ -1,5 +1,31 @@
 import type { IngestResponse } from './types.js';
 
+type IngestItem = IngestResponse['items'][number];
+
+/** "\n🔗 Replaces …" / "\n⚠️ Saved, but not linked …" when the server reports a
+ * replaces link. When the caller asked for `replaces` but the server sent no
+ * link (older server), says the link is unconfirmed. "" when replaces wasn't
+ * requested and nothing was reported (message unchanged). */
+function replacesLine(
+  item: IngestItem | undefined,
+  requestedReplaces: string | undefined,
+  duplicate: boolean,
+): string {
+  const link = item?.replaces_link;
+  if (!link || !link.target_id) {
+    return requestedReplaces
+      ? `\n⚠️ Link to ${requestedReplaces} not confirmed by the server (update may be pending).`
+      : '';
+  }
+  if (link.status === 'linked') {
+    return `\n🔗 Replaces ${link.target_id} (marked as superseded)`;
+  }
+  const reason = link.reason ?? 'unknown reason';
+  return duplicate
+    ? `\n⚠️ Not linked to ${link.target_id}: ${reason}`
+    : `\n⚠️ Saved, but not linked to ${link.target_id}: ${reason}`;
+}
+
 /** Turns an ingest response into an accurate, human-readable message.
  * Distinguishes created / duplicate / error so a failed save is never
  * mislabeled as a duplicate (the silent-data-loss bug), and warns when an
@@ -7,6 +33,8 @@ import type { IngestResponse } from './types.js';
 export function formatIngestResult(
   result: IngestResponse,
   title: string,
+  /** The `replaces` id the caller sent, if any. */
+  requestedReplaces?: string,
 ): { message: string; hint: string; details?: Record<string, unknown> } {
   const item = result.items?.[0];
   const hint = 'Use memory_query to search your saved knowledge';
@@ -19,7 +47,7 @@ export function formatIngestResult(
   }
   if (item?.status === 'duplicate') {
     return {
-      message: `⏭️ Identical content already in memory (id ${item.id}). Nothing new saved. Pass deduplicate:false to save a copy anyway.`,
+      message: `⏭️ Identical content already in memory (id ${item.id}). Nothing new saved. Pass deduplicate:false to save a copy anyway.${replacesLine(item, requestedReplaces, true)}`,
       hint,
     };
   }
@@ -37,7 +65,7 @@ export function formatIngestResult(
     ? `Filed under your default space${space.name ? ` (${space.name})` : ''}. To route a memory to a specific space, pass space:"<space name>" on save, or move it with memory_move_item.`
     : hint;
   return {
-    message: savedMessage,
+    message: savedMessage + replacesLine(item, requestedReplaces, false),
     hint: savedHint,
     details: { id: item?.id, title, space_id: space?.id },
   };

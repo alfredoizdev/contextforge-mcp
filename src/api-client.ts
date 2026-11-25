@@ -618,6 +618,8 @@ export class ApiClient {
           tags: input.tags,
           category: input.category,
           git_context: input.git_context ?? null,
+          // Only sent when set, so older servers see the exact same payload.
+          ...(input.replaces ? { replaces: input.replaces } : {}),
         },
       ],
       options: {
@@ -642,6 +644,7 @@ export class ApiClient {
         source_uri: item.source_uri,
         tags: item.tags ?? [],
         category: item.category,
+        ...(item.replaces ? { replaces: item.replaces } : {}),
       })),
       options: {
         deduplicate: true,
@@ -968,6 +971,7 @@ export class ApiClient {
         source_uri: item.source_uri,
         tags: item.tags ?? [],
         category: item.category,
+        ...(item.replaces ? { replaces: item.replaces } : {}),
       })),
       options: {
         deduplicate: true,

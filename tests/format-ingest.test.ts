@@ -57,3 +57,53 @@ describe('formatIngestResult', () => {
     expect(out.hint).toContain('space:');
   });
 });
+
+describe('formatIngestResult — replaces link', () => {
+  it('linked → says it replaces the old memory', () => {
+    const out = formatIngestResult(
+      res({ id: 'k1', status: 'created', embedded: true, replaces_link: { target_id: 'o1', status: 'linked' } }, 1),
+      'Note',
+    );
+    expect(out.message).toContain('Saved');
+    expect(out.message).toContain('🔗 Replaces o1 (marked as superseded)');
+  });
+  it('skipped with reason → saved, but says why not linked', () => {
+    const out = formatIngestResult(
+      res(
+        {
+          id: 'k1',
+          status: 'created',
+          embedded: true,
+          replaces_link: { target_id: 'o1', status: 'skipped', reason: 'not_found_or_forbidden' },
+        },
+        1,
+      ),
+      'Note',
+    );
+    expect(out.message).toContain('Saved');
+    expect(out.message).toContain('⚠️ Saved, but not linked to o1: not_found_or_forbidden');
+  });
+  it('duplicate → still reports the replaces link outcome', () => {
+    const out = formatIngestResult(
+      res({ id: 'k9', status: 'duplicate', replaces_link: { target_id: 'o1', status: 'skipped', reason: 'duplicate' } }),
+      'Note',
+    );
+    expect(out.message).toContain('already in memory');
+    expect(out.message).toContain('⚠️ Not linked to o1: duplicate');
+    expect(out.message).not.toContain('Saved, but');
+  });
+  it('no replaces_link → message unchanged', () => {
+    const out = formatIngestResult(res({ id: 'k1', status: 'created', embedded: true }, 1), 'Note');
+    expect(out.message).toBe('📥 Saved "Note" to memory');
+  });
+  it('replaces requested but old server returns no replaces_link → not confirmed', () => {
+    const out = formatIngestResult(res({ id: 'k1', status: 'created', embedded: true }, 1), 'Note', 'o1');
+    expect(out.message).toBe(
+      '📥 Saved "Note" to memory\n⚠️ Link to o1 not confirmed by the server (update may be pending).',
+    );
+  });
+  it('replaces not requested → no confirmation warning', () => {
+    const out = formatIngestResult(res({ id: 'k1', status: 'created', embedded: true }, 1), 'Note', undefined);
+    expect(out.message).toBe('📥 Saved "Note" to memory');
+  });
+});

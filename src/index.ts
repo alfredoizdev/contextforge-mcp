@@ -70,6 +70,7 @@ import { runRecall, readStdinBounded, parseHookInput } from "./recall.js";
 import { recordRecallFollowup, computeRecallStats, formatRecallStats } from "./recall-stats.js";
 import { checkForUpdates, getUpdateNotice } from "./update-checker.js";
 import { formatIngestResult } from "./format-ingest.js";
+import { formatQueryResult, formatExpandedResult } from "./format-query.js";
 import { buildRoutingHint } from "./space-routing.js";
 import { validateKey } from "./validate-key.js";
 import { runInitCLI, SERVER_INSTRUCTIONS } from "./init.js";
@@ -390,7 +391,7 @@ const TOOLS = [
   {
     name: "memory_ingest",
     description:
-      "**Save important context to persistent memory — be proactive.** Call this WHENEVER you learn information that would be valuable in a future conversation: project decisions ('we chose Postgres because X'), architectural choices, user preferences, debugging insights, recurring patterns, deadlines, stakeholder context, or any 'remember this' / 'save this' / 'note that' style request from the user. Heuristic: if you would be sad to lose this fact when the conversation ends, ingest it. Better to over-save than to under-save — the memory_query semantic search will surface what's relevant later. Always pass meaningful `title` and `tags` so the item is discoverable. Set `deduplicate:false` to save even if identical content already exists. **ROUTE BY TOPIC:** pass `space:\"<name>\"` matching the memory's topic so it lands in the right space instead of the catch-all default. If you don't yet know the project's spaces, call `cf_tools` with query \"list spaces\" once and reuse the result. Saving without `space:` piles everything into one default space — avoid it in multi-space projects.",
+      "**Save important context to persistent memory — be proactive.** Call this WHENEVER you learn information that would be valuable in a future conversation: project decisions ('we chose Postgres because X'), architectural choices, user preferences, debugging insights, recurring patterns, deadlines, stakeholder context, or any 'remember this' / 'save this' / 'note that' style request from the user. Heuristic: if you would be sad to lose this fact when the conversation ends, ingest it. Better to over-save than to under-save — the memory_query semantic search will surface what's relevant later. Always pass meaningful `title` and `tags` so the item is discoverable. Set `deduplicate:false` to save even if identical content already exists. **ROUTE BY TOPIC:** pass `space:\"<name>\"` matching the memory's topic so it lands in the right space instead of the catch-all default. If you don't yet know the project's spaces, call `cf_tools` with query \"list spaces\" once and reuse the result. Saving without `space:` piles everything into one default space — avoid it in multi-space projects. If this memory replaces one you found earlier, pass its id in `replaces`.",
     annotations: {
       title: "Save to Memory",
       readOnlyHint: false,
@@ -435,6 +436,11 @@ const TOOLS = [
           type: "boolean",
           description:
             "Skip saving if identical content already exists (default: true). Set to false to force a copy even when a duplicate is detected.",
+        },
+        replaces: {
+          type: "string",
+          description:
+            "Id of a memory this one replaces (a decision that changed). The old memory stays but is marked as superseded in search.",
         },
         related_paths: {
           type: "array",
@@ -1348,6 +1354,11 @@ const TOOLS = [
                 description: "Tags",
               },
               category: { type: "string", description: "Category" },
+              replaces: {
+                type: "string",
+                description:
+                  "Id of a memory this one replaces (a decision that changed). The old memory stays but is marked as superseded in search.",
+              },
             },
             required: ["content"],
           },
@@ -1530,7 +1541,7 @@ const TOOLS = [
   {
     name: "memory_correct",
     description:
-      "Update a memory flagged by memory_check_freshness with corrected content after its related code changed. Replaces the stored content and refreshes the git context (current commit SHA) so future freshness checks compare against the new baseline. For a general edit to any memory that is NOT part of a freshness check, use memory_update instead.",
+      "Update a memory flagged by memory_check_freshness with corrected content after its related code changed. Replaces the stored content and refreshes the git context (current commit SHA) so future freshness checks compare against the new baseline. For a general edit to any memory that is NOT part of a freshness check, use memory_update instead. If the decision itself changed, save a new memory with `replaces` instead.",
     annotations: {
       title: "Correct Memory",
       readOnlyHint: false,
@@ -2581,7 +2592,7 @@ async function main() {
             routingHint = buildRoutingHint(names);
           }
           const ingestText = formatResponse(
-            formatIngestResult(result, itemTitle),
+            formatIngestResult(result, itemTitle, input.replaces),
           );
           return {
             content: [
@@ -2639,34 +2650,14 @@ async function main() {
           }
 
           // Format each result as readable text
-          const resultLines = results.map((r: any, idx: number) => {
-            const score = r.score
-              ? ` (${Math.round(r.score * 100)}% match)`
-              : "";
-            const tags = r.tags?.length ? `\n  🏷️ ${r.tags.join(", ")}` : "";
-            const preview = r.content
-              ? r.content.slice(0, 150).replace(/\n/g, " ") +
-                (r.content.length > 150 ? "..." : "")
-              : "";
-            return `${idx + 1}. ${r.title || "Untitled"}${score}\n  🆔 ${r.id}\n  📄 ${preview}${tags}`;
-          });
+          const resultLines = results.map(formatQueryResult);
 
           let responseText = `🔍 Found ${count} result${count === 1 ? "" : "s"} for "${input.query}"\n\n${resultLines.join("\n\n")}`;
 
           // Add expanded results if present
           const expanded = (result as any).expanded_results;
           if (expanded && expanded.length > 0) {
-            const expandedLines = expanded.map((r: any, idx: number) => {
-              const score = r.score
-                ? ` (${Math.round(r.score * 100)}% match)`
-                : "";
-              const tags = r.tags?.length ? `\n  🏷️ ${r.tags.join(", ")}` : "";
-              const preview = r.content
-                ? r.content.slice(0, 150).replace(/\n/g, " ") +
-                  (r.content.length > 150 ? "..." : "")
-                : "";
-              return `${idx + 1}. ${r.title || "Untitled"}${score}\n  🆔 ${r.id}\n  🔗 ${r.relationship_type} → ${r.expanded_from}\n  📄 ${preview}${tags}`;
-            });
+            const expandedLines = expanded.map(formatExpandedResult);
             responseText += `\n\n🔗 Related items (via relationships):\n\n${expandedLines.join("\n\n")}`;
           }
 

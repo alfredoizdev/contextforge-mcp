@@ -168,6 +168,7 @@ export const IngestInputSchema = z.object({
   deduplicate: z.boolean().optional(),
   space_id: z.string().optional(), // Accepts UUID or space name (resolved before API call)
   related_paths: z.preprocess(parseArrayInput, z.array(z.string()).default([])), // Files/dirs this memory is about (staleness detection)
+  replaces: z.string().optional(), // Id of a memory this one replaces (marks the old one as superseded)
 });
 
 export type IngestInput = z.infer<typeof IngestInputSchema>;
@@ -302,14 +303,30 @@ export type MemoryUpdateInput = z.infer<typeof MemoryUpdateInputSchema>;
 
 // ============ API Response Types ============
 
-export interface QueryResult {
+/** The newer memory that replaced a superseded one (server ≥ superseded-memories). */
+export interface SupersededBy {
+  id: string;
+  title: string | null;
+  created_at: string;
+}
+
+/** Optional freshness / supersession fields. Older servers omit them (or send
+ * null); formatting must then be identical to the pre-0.14 output. */
+export interface ResultFreshnessFields {
+  created_at?: string | null;
+  updated_at?: string | null;
+  last_confirmed_at?: string | null;
+  superseded_by?: SupersededBy | null;
+}
+
+export interface QueryResult extends ResultFreshnessFields {
   id: string;
   content: string;
   title?: string;
   score: number;
   priority_score: number;
   source_type: SourceType;
-  source_uri?: string;
+  source_uri?: string | null;
   tags: string[];
   relationships?: Array<{
     type: RelationshipType;
@@ -319,12 +336,13 @@ export interface QueryResult {
   }>;
 }
 
-export interface ExpandedResult {
+export interface ExpandedResult extends ResultFreshnessFields {
   id: string;
   title: string | null;
   content: string;
   score: number;
   source_type: string;
+  source_uri?: string | null;
   tags: string[];
   expanded_from: string;
   relationship_type: string;
@@ -346,6 +364,18 @@ export interface IngestResponse {
     status: "created" | "duplicate" | "error";
     error?: string;
     embedded?: boolean;
+    // Present only when the request passed `replaces`. A skipped link never
+    // fails the save — the item is still created.
+    replaces_link?: {
+      target_id: string;
+      status: "linked" | "skipped";
+      reason?:
+        | "invalid_id"
+        | "self"
+        | "duplicate"
+        | "not_found_or_forbidden"
+        | "insert_failed";
+    };
   }>;
   tokens_used: number;
   // Which space the memory actually landed in. `was_default` is true when the
@@ -653,6 +683,7 @@ export const IngestBatchInputSchema = z.object({
         source_uri: z.string().optional(),
         tags: z.preprocess(parseArrayInput, z.array(z.string()).default([])),
         category: z.string().optional(),
+        replaces: z.string().optional(), // Id of a memory this item replaces
       }),
     )
     .min(1)
