@@ -159,6 +159,28 @@ describe('ApiClient', () => {
       expect(sentItem().replaces).toBe('old-id');
     });
 
+    it('ingestBatch / ingestBatchItems forward replaces per item, only when set', async () => {
+      okIngest();
+      await client.ingestBatchItems({
+        items: [
+          { content: 'a', source_type: 'manual', tags: [], replaces: 'old-a' },
+          { content: 'b', source_type: 'manual', tags: [] },
+        ],
+      });
+      let items = JSON.parse(mockFetch.mock.calls[0][1].body).items;
+      expect(items[0].replaces).toBe('old-a');
+      expect('replaces' in items[1]).toBe(false);
+
+      okIngest();
+      await client.ingestBatch(undefined, [
+        { content: 'c', source_type: 'manual', tags: [], related_paths: [], replaces: 'old-c' },
+        { content: 'd', source_type: 'manual', tags: [], related_paths: [] },
+      ]);
+      items = JSON.parse(mockFetch.mock.calls[1][1].body).items;
+      expect(items[0].replaces).toBe('old-c');
+      expect('replaces' in items[1]).toBe(false);
+    });
+
     it('omits replaces entirely when not given (older servers see the same payload)', async () => {
       okIngest();
       await client.ingest({ content: 'new', source_type: 'manual', tags: [], related_paths: [] });

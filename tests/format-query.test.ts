@@ -1,4 +1,6 @@
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { formatQueryResult, formatExpandedResult } from '../src/format-query';
 
 // Verbatim copies of the inline formatters src/index.ts used for memory_query
@@ -28,6 +30,8 @@ const legacyFixtures: any[] = [
   { id: 'id3', title: '', content: 'line1\nline2', score: 0.5 },
   { id: 'id4', title: 'No content', content: '', score: 0.333, tags: ['only'] },
   { id: 'id5', title: 'Exactly 150', content: 'y'.repeat(150), score: 1, tags: ['t'] },
+  // Today's prod server already returns source_uri: without a date it must not add a line.
+  { id: 'id6', title: 'Has source', content: 'body', score: 0.7, tags: ['s'], source_uri: 'src/a.ts' },
 ];
 
 const base = { id: 'id1', title: 'T', content: 'body', score: 0.91, tags: ['a', 'b'] } as any;
@@ -57,7 +61,7 @@ describe('formatQueryResult', () => {
       { ...base, created_at: '2026-11-01T09:00:00Z', updated_at: '2026-11-24T10:00:00Z', source_uri: 'src/a.ts' },
       0,
     );
-    expect(out).toContain('\n  📅 2026-11-24 · 🔗 src/a.ts');
+    expect(out).toContain('\n  📅 2026-11-24 · 📁 src/a.ts');
   });
 
   it('falls back to created_at when updated_at is missing', () => {
@@ -71,10 +75,9 @@ describe('formatQueryResult', () => {
     expect(out).toContain('📅 2026-11-24');
   });
 
-  it('prints a source-only line when there is no date', () => {
-    const out = formatQueryResult({ ...base, source_uri: 'https://x.dev/a' }, 0);
-    expect(out).toContain('\n  🔗 https://x.dev/a');
-    expect(out).not.toContain('📅');
+  it('prints no freshness line for a source without a date (legacy servers send source_uri)', () => {
+    const r = { ...base, source_uri: 'https://x.dev/a' };
+    expect(formatQueryResult(r, 0)).toBe(legacyResult(r, 0));
   });
 
   it('adds confirmed date', () => {
@@ -144,8 +147,6 @@ describe('formatExpandedResult', () => {
 
 // Source-level wiring checks: index.ts must route memory_query through these
 // formatters and expose `replaces` on memory_ingest.
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
 describe('index.ts wiring (superseded memories)', () => {
   const src = readFileSync(fileURLToPath(new URL('../src/index.ts', import.meta.url)), 'utf8');
   it('memory_query uses formatQueryResult / formatExpandedResult', () => {

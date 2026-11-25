@@ -1354,6 +1354,11 @@ const TOOLS = [
                 description: "Tags",
               },
               category: { type: "string", description: "Category" },
+              replaces: {
+                type: "string",
+                description:
+                  "Id of a memory this one replaces (a decision that changed). The old memory stays but is marked as superseded in search.",
+              },
             },
             required: ["content"],
           },

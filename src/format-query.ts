@@ -37,16 +37,16 @@ function supersededLine(r: ResultFreshnessFields): string {
   return `\n  ⚠️ Replaced by "${title}" (${meta}). Prefer that one.`;
 }
 
-/** "\n  📅 date · confirmed date · 🔗 source" — only when a date or source exists. */
+/** "\n  📅 date · confirmed date · 📁 source" — only when a date exists. Older
+ * servers already send source_uri without dates; that must not add a line. */
 function freshnessLine(r: ResultFreshnessFields & { source_uri?: string | null }): string {
   const date = isoDate(r.updated_at) ?? isoDate(r.created_at);
   const source = typeof r.source_uri === 'string' && r.source_uri ? r.source_uri : null;
-  if (!date && !source) return '';
-  const parts: string[] = [];
-  if (date) parts.push(`📅 ${date}`);
+  if (!date) return '';
+  const parts: string[] = [`📅 ${date}`];
   const confirmed = isoDate(r.last_confirmed_at);
   if (confirmed) parts.push(`confirmed ${confirmed}`);
-  if (source) parts.push(`🔗 ${source}`);
+  if (source) parts.push(`📁 ${source}`);
   return `\n  ${parts.join(' · ')}`;
 }
 

@@ -644,6 +644,7 @@ export class ApiClient {
         source_uri: item.source_uri,
         tags: item.tags ?? [],
         category: item.category,
+        ...(item.replaces ? { replaces: item.replaces } : {}),
       })),
       options: {
         deduplicate: true,
@@ -970,6 +971,7 @@ export class ApiClient {
         source_uri: item.source_uri,
         tags: item.tags ?? [],
         category: item.category,
+        ...(item.replaces ? { replaces: item.replaces } : {}),
       })),
       options: {
         deduplicate: true,

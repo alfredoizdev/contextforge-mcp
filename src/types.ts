@@ -683,6 +683,7 @@ export const IngestBatchInputSchema = z.object({
         source_uri: z.string().optional(),
         tags: z.preprocess(parseArrayInput, z.array(z.string()).default([])),
         category: z.string().optional(),
+        replaces: z.string().optional(), // Id of a memory this item replaces
       }),
     )
     .min(1)

@@ -83,6 +83,14 @@ describe('formatIngestResult — replaces link', () => {
     expect(out.message).toContain('Saved');
     expect(out.message).toContain('⚠️ Saved, but not linked to o1: not_found_or_forbidden');
   });
+  it('duplicate → still reports the replaces link outcome', () => {
+    const out = formatIngestResult(
+      res({ id: 'k9', status: 'duplicate', replaces_link: { target_id: 'o1', status: 'skipped', reason: 'duplicate' } }),
+      'Note',
+    );
+    expect(out.message).toContain('already in memory');
+    expect(out.message).toContain('⚠️ Saved, but not linked to o1: duplicate');
+  });
   it('no replaces_link → message unchanged', () => {
     const out = formatIngestResult(res({ id: 'k1', status: 'created', embedded: true }, 1), 'Note');
     expect(out.message).toBe('📥 Saved "Note" to memory');
